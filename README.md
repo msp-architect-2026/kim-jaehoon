@@ -43,6 +43,8 @@
 ---
 
 ## 3. 전체 아키텍처
+<img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/22fdef60-0940-4247-992a-9ac1c63f9991" />
+
 
 > 아래 다이어그램은 프로젝트 최종 목표 아키텍처입니다.
 
