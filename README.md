@@ -6,21 +6,52 @@
 ![GitOps](https://img.shields.io/badge/GitOps-Argo%20CD-ef7b4d?logo=argo)
 ![CI/CD](https://img.shields.io/badge/CI%2FCD-GitLab-fc6d26?logo=gitlab)
 
-> **목표:** 온프레미스 환경에서 `Kubernetes + GitLab + Argo CD` 기반의 실무형 GitOps 배포 체계를 직접 구축하고, 운영 관점의 관측(Observability)·알림·검증 체계까지 연결하는 프로젝트입니다.
+> **목표:** 온프레미스 환경에서 `Kubernetes + GitLab + Argo CD` 기반의 실무형 GitOps 배포 체계를 직접 구축하고,  
+> 운영 관점의 관측(Observability)·알림·검증 체계까지 연결하는 프로젝트입니다.
 
 ---
 
-## 📸 Demo Screenshots
+## 📸 Screenshots
 
-- Online Boutique 메인 화면
-- Cart / Checkout 화면
-- (추가 예정) GitLab CI / Argo CD / Grafana / Slack 알림 화면
+### 1) Application (Online Boutique)
+<p align="center">
+  <img src="여기에_온라인부티크_메인화면_URL" width="900" alt="Online Boutique Home" />
+</p>
+
+<p align="center">
+  <img src="여기에_카트_체크아웃_화면_URL" width="900" alt="Online Boutique Cart and Checkout" />
+</p>
+
+> 위 화면은 온프레미스 Kubernetes 환경에 배포된 Online Boutique UI 예시입니다.
+
+---
+
+### 2) CI/CD & GitOps (추가 예정)
+<p align="center">
+  <img src="여기에_GitLab_CI_파이프라인_스크린샷_URL" width="900" alt="GitLab CI Pipeline" />
+</p>
+
+<p align="center">
+  <img src="여기에_ArgoCD_Sync_History_스크린샷_URL" width="900" alt="Argo CD Sync and History" />
+</p>
+
+---
+
+### 3) Observability & Alerts (추가 예정)
+<p align="center">
+  <img src="여기에_Grafana_대시보드_스크린샷_URL" width="900" alt="Grafana Dashboard" />
+</p>
+
+<p align="center">
+  <img src="여기에_Slack_알림_스크린샷_URL" width="900" alt="Slack Alert Notification" />
+</p>
 
 ---
 
 ## 1) 프로젝트 개요
 
-이 프로젝트는 **Google Online Boutique**(마이크로서비스 데모 애플리케이션)를 기반으로, 온프레미스(On-Premise) 환경에서 **Kubernetes + GitLab + Argo CD 기반 GitOps 배포 체계**를 구축하는 것을 목표로 합니다.
+이 프로젝트는 **Google Online Boutique**(마이크로서비스 데모 애플리케이션)를 기반으로,  
+온프레미스(On-Premise) 환경에서 **Kubernetes + GitLab + Argo CD 기반 GitOps 배포 체계**를 구축하는 것을 목표로 합니다.
 
 단순한 배포 자동화를 넘어서, 아래 요소까지 포함한 **운영 친화적 DevOps 환경**을 지향합니다.
 
