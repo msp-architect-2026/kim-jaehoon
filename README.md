@@ -263,7 +263,7 @@ README는 개요/핵심 흐름 중심으로 유지하고, 상세 설계/운영/�
   - Argo CD repo 인증 문제
   - Ingress 외부 접속 문제
 
-👉 **[Troubleshooting Log 바로가기](https://github.com/msp-architect-2026/kim-jaehoon/wiki/Troubleshooting-Log)**
+👉 **[Troubleshooting Log 바로가기](https://github.com/msp-architect-2026/kim-jaehoon/wiki/TroubleshootingLog)**
 
 ---
 
