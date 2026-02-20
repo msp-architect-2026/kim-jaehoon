@@ -1,6 +1,8 @@
 # 🏗️ 온프레미스 마이크로서비스 인프라 및 GitOps 자동화 프로젝트  
 ### (Google Online Boutique 기반)
 <img width="1898" height="946" alt="{AD366E49-FF7E-4FAD-8955-4FAEF7833F98}" src="https://github.com/user-attachments/assets/07c01a2d-077b-46f3-8fcc-d02bad9f3608" />
+<img width="1895" height="935" alt="{707CFA18-DD7D-4B6D-9339-D527D08D1A50}" src="https://github.com/user-attachments/assets/d5715565-c027-47a7-80dc-1703da25e405" />
+
 
 ## 1. 프로젝트 개요
 
