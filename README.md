@@ -15,7 +15,7 @@
 
 ### 1) Application (Online Boutique)
 <p align="center">
-  <img src="./docs/images/online-boutique-home.png" width="900" alt="Online Boutique Home" />
+  <img src="./docs/images/online-boutique-home.pn" width="900" alt="Online Boutique Home" />
 </p>
 
 <p align="center">
