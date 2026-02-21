@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-say(){ echo -e "\033[0;32m$*\033[0m"; }
+say(){  echo -e "\033[0;32m$*\033[0m"; }
 warn(){ echo -e "\033[1;33m$*\033[0m"; }
-err(){ echo -e "\033[0;31m$*\033[0m"; }
+err(){  echo -e "\033[0;31m$*\033[0m"; }
 
 need(){ command -v "$1" >/dev/null 2>&1 || { err "❌ '$1' 필요"; exit 1; }; }
 
@@ -36,9 +36,9 @@ fi
 GITLAB_HOME="${GITLAB_HOME:-/home/gitlab}"
 RUNNER_HOME="${RUNNER_HOME:-/home/gitlab-runner}"
 
-# 버전은 env로 쉽게 바꾸게 해둠
-GITLAB_IMAGE="${GITLAB_IMAGE:-gitlab/gitlab-ee:16.1.0-ee.0}"
-RUNNER_IMAGE="${RUNNER_IMAGE:-gitlab/gitlab-runner:alpine}"
+# ✅ 최신 월간 버전 기본값(필요 시 env로 override)
+GITLAB_IMAGE="${GITLAB_IMAGE:-gitlab/gitlab-ee:18.9.0-ee.0}"
+RUNNER_IMAGE="${RUNNER_IMAGE:-gitlab/gitlab-runner:alpine-v18.9.0}"
 
 TIMEZONE="${TIMEZONE:-Asia/Seoul}"
 SSH_PORT="${SSH_PORT:-8022}"
@@ -59,7 +59,7 @@ echo " GitLab HTTPS Bootstrap (GitLab + Registry + Runner)"
 echo " OS: Rocky Linux 8/9"
 echo " - Local CA 생성 + SAN 포함 서버 인증서 발급"
 echo " - GitLab/Registry HTTPS 설정 + HTTP->HTTPS redirect"
-echo " - Docker trust 등록(insecure-registry 제거)"
+echo " - Docker/OS trust 등록(insecure-registry 제거)"
 echo "=================================================="
 
 warn "⚠️ 컨테이너/볼륨은 아래 경로에 생성됩니다:"
@@ -100,19 +100,21 @@ read -r -p "Q8) 다른 머신/쿠버노드에 배포할 CA 설치 헬퍼 스크�
 DO_HELPER="${DO_HELPER:-N}"
 
 REGISTRY_HOSTPORT="${EXTERNAL_HOST}:${REGISTRY_PORT}"
+REGISTRY_HOSTPORT_IP="${HOST_IP}:${REGISTRY_PORT}"
 
 echo
 warn "-------------------- 확인 --------------------"
-warn " HOST_IP           : $HOST_IP"
-warn " EXTERNAL_HOST     : $EXTERNAL_HOST"
-warn " Registry Hostport : $REGISTRY_HOSTPORT"
-warn " GitLab Image      : $GITLAB_IMAGE"
-warn " Runner Image      : $RUNNER_IMAGE"
-warn " SSH Port          : $SSH_PORT"
-warn " Open Firewall     : $DO_FW"
-warn " Make Swap         : $DO_SWAP ($SWAP_SIZE)"
-warn " Install Runner    : $DO_RUNNER"
-warn " Make Helper       : $DO_HELPER"
+warn " HOST_IP              : $HOST_IP"
+warn " EXTERNAL_HOST        : $EXTERNAL_HOST"
+warn " Registry Hostport    : $REGISTRY_HOSTPORT"
+warn " Registry Hostport(IP): $REGISTRY_HOSTPORT_IP"
+warn " GitLab Image         : $GITLAB_IMAGE"
+warn " Runner Image         : $RUNNER_IMAGE"
+warn " SSH Port             : $SSH_PORT"
+warn " Open Firewall        : $DO_FW"
+warn " Make Swap            : $DO_SWAP ($SWAP_SIZE)"
+warn " Install Runner       : $DO_RUNNER"
+warn " Make Helper          : $DO_HELPER"
 warn "--------------------------------------------"
 read -rp "진행할까요? (y/n) [기본 n]: " CONFIRM
 CONFIRM="${CONFIRM:-n}"
@@ -132,16 +134,16 @@ as_root "sed -i 's/^SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config |
 # ---------- 3. Swap (optional) ----------
 if [[ "$DO_SWAP" =~ ^[Yy]$ ]]; then
   say "[3/9] Swap 생성: ${SWAP_SIZE}"
-  as_root "if [[ ! -f /swapfile ]]; then
-    fallocate -l '${SWAP_SIZE}' /swapfile
-    chmod 600 /swapfile
-    mkswap /swapfile
-    swapon /swapfile
-    echo '/swapfile none swap sw 0 0' >> /etc/fstab
-    sysctl -w vm.swappiness=10
-  else
-    echo 'swapfile already exists -> skip'
-  fi"
+  as_root "
+    if [[ ! -f /swapfile ]]; then
+      fallocate -l '${SWAP_SIZE}' /swapfile
+      chmod 600 /swapfile
+      mkswap /swapfile
+    fi
+    swapon /swapfile || true
+    grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    sysctl -w vm.swappiness=10 || true
+  "
 else
   warn "[3/9] Swap 스킵"
 fi
@@ -151,6 +153,7 @@ say "[4/9] Docker 엔진 + compose plugin 설치"
 as_root "dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo || true"
 as_root "dnf -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin"
 as_root "systemctl enable --now docker"
+as_root "docker compose version >/dev/null 2>&1 || (echo '❌ docker compose plugin 확인 실패' && exit 1)"
 
 # ---------- 5. CA + server cert ----------
 say "[5/9] 로컬 CA 생성 + 서버 인증서(SAN) 발급"
@@ -176,17 +179,17 @@ fi"
 # SAN 구성 (DNS/IP)
 ALT_DNS_LINE=""
 ALT_IP_LINE="IP.1 = ${HOST_IP}"
+
 if is_ip "$EXTERNAL_HOST"; then
-  # 외부 호스트가 IP면 IP로도 넣고(중복 방지)
   if [[ "$EXTERNAL_HOST" != "$HOST_IP" ]]; then
     ALT_IP_LINE=$'IP.1 = '"${HOST_IP}"$'\nIP.2 = '"${EXTERNAL_HOST}"
   fi
 else
   ALT_DNS_LINE="DNS.1 = ${EXTERNAL_HOST}"
-  # 혹시 hosts 파일로 IP 접속도 할 수 있으니 IP도 포함
+  # IP 접속도 고려(브릿지/hosts 등)
 fi
 
-# server.ext 작성
+# server.ext 작성 (매번 최신으로 덮어씀)
 as_root "cat > '${SVR_EXT}' <<EOF
 authorityKeyIdentifier=keyid,issuer
 basicConstraints=CA:FALSE
@@ -199,7 +202,7 @@ ${ALT_DNS_LINE}
 ${ALT_IP_LINE}
 EOF"
 
-# 서버 키/CSR/서명(매번 새로 발급해도 되지만, 재실행 시 재사용하도록)
+# 서버 키/CSR/서명(키는 재사용, cert는 매번 갱신 발급)
 as_root "if [[ ! -f '${SVR_KEY}' ]]; then
   openssl genrsa -out '${SVR_KEY}' 2048
 fi"
@@ -208,15 +211,24 @@ as_root "openssl req -new -key '${SVR_KEY}' -out '${SVR_CSR}' -subj '/CN=${EXTER
 as_root "openssl x509 -req -in '${SVR_CSR}' -CA '${CA_CRT}' -CAkey '${CA_KEY}' -CAcreateserial \
   -out '${SVR_CRT}' -days '${CA_DAYS}' -sha256 -extfile '${SVR_EXT}'"
 
+# ✅ 권한 명시(안전)
+as_root "chmod 755 '${SSL_DIR}' || true"
+as_root "chmod 600 '${CA_KEY}' '${SVR_KEY}' || true"
+as_root "chmod 644 '${CA_CRT}' '${SVR_CRT}' '${SVR_EXT}' || true"
+
 # OS trust 등록(이 서버에서 curl/git 등이 self-signed로 안 터지게)
 say " - OS CA trust 등록"
 as_root "cp -f '${CA_CRT}' /etc/pki/ca-trust/source/anchors/gitlab-local-ca.crt && update-ca-trust || true"
 
-# Docker trust: 레지스트리 호스트명:포트 기준으로 등록
-say " - Docker trust(/etc/docker/certs.d/${REGISTRY_HOSTPORT}/ca.crt)"
-as_root "mkdir -p '/etc/docker/certs.d/${REGISTRY_HOSTPORT}'"
-as_root "cp -f '${CA_CRT}' '/etc/docker/certs.d/${REGISTRY_HOSTPORT}/ca.crt'"
-as_root "systemctl restart docker"
+# Docker trust: 레지스트리 호스트명:포트 기준으로 등록(✅ EXTERNAL_HOST, HOST_IP 둘 다)
+say " - Docker trust 등록(/etc/docker/certs.d/<host:port>/ca.crt)"
+as_root "
+  for hp in '${REGISTRY_HOSTPORT}' '${REGISTRY_HOSTPORT_IP}'; do
+    mkdir -p \"/etc/docker/certs.d/\${hp}\"
+    cp -f '${CA_CRT}' \"/etc/docker/certs.d/\${hp}/ca.crt\"
+  done
+  systemctl restart docker
+"
 
 # ---------- 6. GitLab docker-compose.yml ----------
 say "[6/9] GitLab docker-compose.yml 생성 및 HTTPS 설정"
@@ -275,10 +287,14 @@ services:
     shm_size: '256m'
 EOF"
 
-# ssl 파일을 /etc/gitlab/ssl 위치로 맞춤 (config 볼륨 내부)
-say " - GitLab config 볼륨에 ssl 배치(/etc/gitlab/ssl)"
+# ✅ Omnibus 설정 내 \" 제거(여기서 실제 파일을 교정) - 재실행 안전
+as_root "
+  sed -i 's#\\\\\"/etc/gitlab/ssl/server.crt\\\\\"#\"/etc/gitlab/ssl/server.crt\"#g' '${GITLAB_HOME}/docker-compose.yml' || true
+  sed -i 's#\\\\\"/etc/gitlab/ssl/server.key\\\\\"#\"/etc/gitlab/ssl/server.key\"#g' '${GITLAB_HOME}/docker-compose.yml' || true
+"
+
+# ✅ GitLab config 볼륨에 ssl 존재 보장
 as_root "mkdir -p '${GITLAB_HOME}/config/ssl'"
-# [수정됨] 이전에 오류를 일으켰던 cp -f 명령어 3줄을 안전하게 삭제했습니다.
 
 # ---------- 7. Runner docker-compose.yml (optional) ----------
 if [[ "$DO_RUNNER" =~ ^[Yy]$ ]]; then
@@ -287,6 +303,7 @@ if [[ "$DO_RUNNER" =~ ^[Yy]$ ]]; then
 
   # Runner 컨테이너에 CA를 넣어둠(등록 시 --tls-ca-file로 사용)
   as_root "cp -f '${CA_CRT}' '${RUNNER_HOME}/certs/ca.crt'"
+  as_root "chmod 644 '${RUNNER_HOME}/certs/ca.crt' || true"
 
   as_root "cat > '${RUNNER_HOME}/docker-compose.yml' <<EOF
 version: '3.6'
@@ -328,7 +345,7 @@ fi
 say "⏳ GitLab 부팅 대기 (로컬 체크: https://${HOST_IP})"
 # GitLab이 302/200을 내면 살아난 것으로 봄
 for i in {1..120}; do
-  code="$(curl -k -s -o /dev/null -w '%{http_code}' "https://${HOST_IP}/users/sign_in" || true)"
+  code="$(curl --cacert "${CA_CRT}" -sS -L -o /dev/null -w '%{http_code}' "https://${HOST_IP}/users/sign_in" || true)"
   if [[ "$code" =~ ^(200|302)$ ]]; then
     say "✅ GitLab 접속 가능 (HTTP ${code})"
     break
@@ -370,12 +387,14 @@ if [[ "$DO_HELPER" =~ ^[Yy]$ ]]; then
   say "헬퍼 스크립트 생성: ${GITLAB_HOME}/ca-distribute/"
   as_root "mkdir -p '${GITLAB_HOME}/ca-distribute'"
   as_root "cp -f '${CA_CRT}' '${GITLAB_HOME}/ca-distribute/ca.crt'"
+  as_root "chmod 644 '${GITLAB_HOME}/ca-distribute/ca.crt' || true"
 
   # docker용
   as_root "cat > '${GITLAB_HOME}/ca-distribute/install-ca-docker.sh' <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 REGISTRY_HOSTPORT=\"__REGISTRY_HOSTPORT__\"
+REGISTRY_HOSTPORT_IP=\"__REGISTRY_HOSTPORT_IP__\"
 CA_SRC=\"\${1:-./ca.crt}\"
 
 if [[ ! -f \"\$CA_SRC\" ]]; then
@@ -383,12 +402,18 @@ if [[ ! -f \"\$CA_SRC\" ]]; then
   exit 1
 fi
 
-sudo mkdir -p \"/etc/docker/certs.d/\${REGISTRY_HOSTPORT}\"
-sudo cp -f \"\$CA_SRC\" \"/etc/docker/certs.d/\${REGISTRY_HOSTPORT}/ca.crt\"
+for hp in \"\$REGISTRY_HOSTPORT\" \"\$REGISTRY_HOSTPORT_IP\"; do
+  sudo mkdir -p \"/etc/docker/certs.d/\${hp}\"
+  sudo cp -f \"\$CA_SRC\" \"/etc/docker/certs.d/\${hp}/ca.crt\"
+done
+
 sudo systemctl restart docker
-echo \"✅ Docker trust 등록 완료: /etc/docker/certs.d/\${REGISTRY_HOSTPORT}/ca.crt\"
+echo \"✅ Docker trust 등록 완료\"
+echo \" - /etc/docker/certs.d/\${REGISTRY_HOSTPORT}/ca.crt\"
+echo \" - /etc/docker/certs.d/\${REGISTRY_HOSTPORT_IP}/ca.crt\"
 EOF"
   as_root "sed -i \"s/__REGISTRY_HOSTPORT__/${REGISTRY_HOSTPORT}/g\" '${GITLAB_HOME}/ca-distribute/install-ca-docker.sh'"
+  as_root "sed -i \"s/__REGISTRY_HOSTPORT_IP__/${REGISTRY_HOSTPORT_IP}/g\" '${GITLAB_HOME}/ca-distribute/install-ca-docker.sh'"
   as_root "chmod +x '${GITLAB_HOME}/ca-distribute/install-ca-docker.sh'"
 
   # containerd용(쿠버 노드)
@@ -403,13 +428,36 @@ if [[ ! -f \"\$CA_SRC\" ]]; then
   exit 1
 fi
 
-# config_path 보장(없으면 기본 config 생성)
+# config.toml 보장
 if [[ ! -f /etc/containerd/config.toml ]]; then
   sudo containerd config default | sudo tee /etc/containerd/config.toml >/dev/null
 fi
 
-# containerd certs.d 경로 활성화
-sudo sed -i 's#^\\s*config_path\\s*=\\s*\".*\"#  config_path = \"/etc/containerd/certs.d\"#' /etc/containerd/config.toml || true
+# config_path 활성화(없으면 cri registry 섹션에 삽입)
+if grep -q 'plugins.\"io.containerd.grpc.v1.cri\".registry' /etc/containerd/config.toml; then
+  if grep -q 'config_path\\s*=\\s*\"/etc/containerd/certs.d\"' /etc/containerd/config.toml; then
+    : # ok
+  else
+    if grep -q 'config_path\\s*=' /etc/containerd/config.toml; then
+      sudo sed -i 's#^\\(\\s*config_path\\s*=\\s*\\)\".*\"#\\1\"/etc/containerd/certs.d\"#' /etc/containerd/config.toml || true
+    else
+      # 섹션 바로 아래에 한 줄 삽입
+      sudo awk '
+        {print}
+        $0 ~ /\\[plugins\\.\\"io\\.containerd\\.grpc\\.v1\\.cri\\"\\.registry\\]/ {
+          print "  config_path = \\"/etc/containerd/certs.d\\""
+        }
+      ' /etc/containerd/config.toml | sudo tee /etc/containerd/config.toml.tmp >/dev/null
+      sudo mv /etc/containerd/config.toml.tmp /etc/containerd/config.toml
+    fi
+  fi
+else
+  cat <<EOT | sudo tee -a /etc/containerd/config.toml >/dev/null
+
+[plugins."io.containerd.grpc.v1.cri".registry]
+  config_path = "/etc/containerd/certs.d"
+EOT
+fi
 
 sudo mkdir -p \"/etc/containerd/certs.d/\${REGISTRY_HOSTPORT}\"
 sudo cp -f \"\$CA_SRC\" \"/etc/containerd/certs.d/\${REGISTRY_HOSTPORT}/ca.crt\"
