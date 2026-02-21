@@ -15,7 +15,8 @@
 
 ### 1) Application (Online Boutique)
 <p align="center">
-  <img src="여기에_온라인부티크_메인화면_URL" width="900" alt="Online Boutique Home" />
+  <img src="![Uploading 스크린샷 2026-02-21 221800.png…]()
+" width="900" alt="Online Boutique Home" />
 </p>
 
 <p align="center">
