@@ -85,7 +85,7 @@
 ---
 
 ## 3) 전체 아키텍처
-
+(./docs/images/architecture.drawio.png)
 ```text
 [Developer PC]
    └─ push → [GitLab (Mini PC)]
