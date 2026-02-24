@@ -17,7 +17,7 @@
 ![Demo](./docs/images/online-boutique-home.png)
 
 ## 🗺️ Architecture & Workflow
-![Architecture Diagram](./docs/images/architecture.png) 
+![Architecture Diagram](./docs/images/app_flow.png) 
 
 ---
 
