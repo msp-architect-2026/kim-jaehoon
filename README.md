@@ -17,9 +17,15 @@
 ![Demo](./docs/images/online-boutique-home.png)
 
 ## 🗺️ Architecture & Workflow
-![Architecture Diagram](./docs/images/app_flow.png) 
-![Architecture Diagram](./docs/images/k8s-node-roles.png) 
-![Architecture Diagram](./docs/images/cicd-gitops-platform.png) 
+
+### 1) Application Flow Architecture
+![01 Application Flow](./docs/images/app_flow.png)
+
+### 2) Kubernetes Node Roles Architecture
+![02 K8s Node Roles](./docs/images/k8s-node-roles.png)
+
+### 3) CI/CD & GitOps Platform Architecture
+![03 CI/CD & GitOps Platform](./docs/images/cicd-gitops-platform.png)
 
 ---
 
