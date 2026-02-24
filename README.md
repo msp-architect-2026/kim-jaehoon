@@ -5,20 +5,17 @@
 온프레미스(kubeadm) 환경에서 코드 푸시부터 배포, 모니터링, 알림(Slack)까지 이어지는 GitOps 기반 운영 플랫폼입니다. 수동 개입을 최소화하고 상태를 선언적으로 관리(Self-Heal)하여 인프라의 신뢰성을 높였습니다.
 
 ## 🛠️ Tech Stack
-* **Infrastructure:** Kubernetes (kubeadm, On-Premise)
-* **CI/CD (GitOps):** GitLab CI, Container Registry, Argo CD
-* **Observability:** Prometheus, Loki, Grafana, Alertmanager
-* **Communication:** Slack Webhook
+* **Infra:** ☸️ Kubernetes (kubeadm, On-Prem)
+* **CI/CD:** 🦊 GitLab CI ➔ 🐳 Container Registry ➔ 🐙 Argo CD
+* **Observability:** 📊 Prometheus & Loki ➔ 📈 Grafana ➔ 🔔 Alertmanager
+* **Communication:** 💬 Slack Webhook
+*(💡 팁: 이 부분은 GitHub Readme 뱃지(Shields.io 등)를 활용해 깔끔한 아이콘으로 대체하시면 가시성이 더 좋아집니다.)*
 
 ## 💻 Live Action
 ![Demo](./docs/images/demo.gif)
 
 ## 🗺️ Architecture & Workflow
 ![Architecture Diagram](./docs/images/architecture.png) 
-
-* **CI Pipeline:** GitLab CI ➔ Container Registry
-* **CD Pipeline (GitOps):** Manifest Repository ➔ Argo CD ➔ Kubernetes
-* **Observability:** Prometheus / Loki ➔ Grafana ➔ Alertmanager ➔ Slack
 
 ---
 
