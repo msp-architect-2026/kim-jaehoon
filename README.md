@@ -14,7 +14,7 @@
 </div>
 
 ## 💻 Live Action
-![Demo](online-boutique-home.png)
+![Demo](./docs/images/online-boutique-home.png)
 
 ## 🗺️ Architecture & Workflow
 ![Architecture Diagram](./docs/images/architecture.png) 
