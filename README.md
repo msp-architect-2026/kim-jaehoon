@@ -18,14 +18,14 @@
 
 ## 🗺️ Architecture & Workflow
 
-### 1) Application Flow Architecture
-![ Application Flow](./docs/images/app_flow.png)
+### Application Flow
+![Application Flow](./docs/images/app_flow.png)
 
-### 2) Kubernetes Node Roles Architecture
-![ K8s Node Roles](./docs/images/k8s-node-roles.png)
+### K8s Node Roles
+![K8s Node Roles](./docs/images/k8s-node-roles.png)
 
-### 3) CI/CD & GitOps Platform Architecture
-![ CI/CD & GitOps Platform](./docs/images/cicd-gitops-platform.png)
+### CI/CD & GitOps Platform
+![CI/CD & GitOps](./docs/images/cicd-gitops-platform.png)
 
 ---
 
