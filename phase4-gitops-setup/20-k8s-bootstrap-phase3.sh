@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-say(){  echo -e "\033[0;32m$*\033[0m"; }
+say(){ echo -e "\033[0;32m$*\033[0m"; }
 warn(){ echo -e "\033[1;33m$*\033[0m"; }
-err(){  echo -e "\033[0;31m$*\033[0m"; }
+err(){ echo -e "\033[0;31m$*\033[0m"; }
 
 need(){ command -v "$1" >/dev/null 2>&1 || { err "❌ '$1' 필요"; exit 1; }; }
 need kubectl
 need curl
 need base64
-need awk
 need sed
+need awk
 
 # ---------- env ----------
 ENV_FILE="${1:-./.env.gitops-lab}"
@@ -25,6 +25,7 @@ source "$ENV_FILE"
 # ---------- safety checks for env ----------
 : "${REGISTRY_HOSTPORT:=}"
 : "${GITOPS_REPO_URL:=}"
+: "${GITLAB_CA_CERT:=}"   # (선택) GitLab bootstrap에서 저장해둔 CA 경로
 
 if [[ -z "$REGISTRY_HOSTPORT" ]]; then
   err "❌ REGISTRY_HOSTPORT env가 비어있음(.env.gitops-lab 확인)"
@@ -44,7 +45,7 @@ if [[ "$GITOPS_REPO_URL" =~ ^http:// ]]; then
   warn "⚠️ GITOPS_REPO_URL이 http:// 입니다. GitLab이 HTTPS면 https:// 로 바꾸는 게 보통 맞습니다."
 fi
 
-# ---------- kubectl preflight ----------
+# ---------- kubectl preflight (sudo/루트로 실행해도 최대한 살아남기) ----------
 kube_ok() { kubectl get nodes >/dev/null 2>&1; }
 
 if ! kube_ok; then
@@ -65,10 +66,10 @@ CTX="$(kubectl config current-context 2>/dev/null || true)"
 echo "=================================================="
 echo " Phase 3 Bootstrap (Ingress-NGINX + Argo CD) + GitLab HTTPS(사설 CA) 대응"
 echo " - (옵션) Helm 설치"
-echo " - (옵션) ingress-nginx 설치(Helm, NodePort)"
+echo " - (옵션) ingress-nginx 설치(Helm, LoadBalancer)   # MetalLB 사용 시 권장"
 echo " - Argo CD 설치(SSA)/NodePort 노출/초기 비번 출력"
 echo " - app namespace + registry pull secret + SA patch"
-echo " - (옵션) Argo repo secret (private gitops-repo)"
+echo " - (옵션) Argo repo credential secret"
 echo " - (옵션) Argo TLS CA 등록(argocd-tls-certs-cm) + repo-server restart"
 echo " - (옵션) Argo Application apply"
 echo "=================================================="
@@ -82,7 +83,8 @@ echo
 read -rp "Q0-1) Helm 설치할까요? (y/N): " DO_HELM
 DO_HELM="${DO_HELM:-N}"
 
-read -rp "Q0-2) ingress-nginx 설치할까요? (Helm, NodePort) (y/N): " DO_ING
+# ✅ 문구 수정: NodePort → LoadBalancer
+read -rp "Q0-2) ingress-nginx 설치할까요? (Helm, LoadBalancer) (y/N): " DO_ING
 DO_ING="${DO_ING:-N}"
 
 read -rp "Q1) Argo CD namespace [기본 argocd]: " ARGO_NS
@@ -109,18 +111,15 @@ if [[ "$DO_APP" =~ ^[Yy]$ ]]; then
   GITOPS_PATH="${GITOPS_PATH:-apps/demo/overlays/dev}"
 fi
 
-# --- (옵션) Argo TLS CA 등록 여부 (GitLab HTTPS self-signed 대응) ---
+# --- (옵션) Argo TLS CA 등록 여부 ---
 DO_ARGO_TLS="N"
-GITLAB_CA_CERT="${GITLAB_CA_CERT:-}"   # env에 있으면 우선 사용(단, k8s-master에 실제 파일이 있어야 함)
-
 if [[ "$GITOPS_REPO_URL" =~ ^https:// ]]; then
-  if [[ -z "$GITLAB_CA_CERT" ]]; then
-    echo
+  if [[ -z "${GITLAB_CA_CERT:-}" ]]; then
     read -rp "Q5-3) (권장) GitLab CA 인증서 경로(Argo TLS 등록용) [엔터=스킵]: " GITLAB_CA_CERT
     GITLAB_CA_CERT="${GITLAB_CA_CERT:-}"
   fi
 
-  if [[ -n "$GITLAB_CA_CERT" ]]; then
+  if [[ -n "${GITLAB_CA_CERT:-}" ]]; then
     read -rp "Q5-4) (권장) Argo(repo-server)에 GitLab CA 등록할까요? (y/N): " DO_ARGO_TLS
     DO_ARGO_TLS="${DO_ARGO_TLS:-N}"
   fi
@@ -135,7 +134,7 @@ warn " GitOps Repo URL : ${GITOPS_REPO_URL:-<empty>}"
 warn " Argo NS         : $ARGO_NS"
 warn " Install ArgoCD  : $DO_ARGO"
 warn " NodePort expose : $DO_NODEPORT"
-warn " Install ingress : $DO_ING"
+warn " Install ingress : $DO_ING (LoadBalancer)"
 warn " Target NS       : $TARGET_NS"
 warn " Argo TLS CA     : $DO_ARGO_TLS (CA=${GITLAB_CA_CERT:-<none>})"
 warn " Make App        : $DO_APP"
@@ -166,13 +165,13 @@ fi
 # ---------- (옵션) ingress-nginx 설치 ----------
 if [[ "$DO_ING" =~ ^[Yy]$ ]]; then
   need helm
-  say "[1/7] ingress-nginx 설치(NodePort)"
+  say "[1/7] ingress-nginx 설치(LoadBalancer / MetalLB)"
   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx >/dev/null 2>&1 || true
   helm repo update >/dev/null 2>&1 || true
 
   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
     -n ingress-nginx --create-namespace \
-    --set controller.service.type=NodePort >/dev/null
+    --set controller.service.type=LoadBalancer >/dev/null
 
   say "✅ ingress-nginx 설치 완료. Service 확인:"
   kubectl -n ingress-nginx get svc ingress-nginx-controller || true
@@ -233,9 +232,10 @@ fi
 
 # ---------- (권장) Argo repo-server에 GitLab CA 등록 (HTTPS self-signed 대응) ----------
 if [[ "$DO_ARGO_TLS" =~ ^[Yy]$ ]]; then
-  if [[ -z "${GITLAB_CA_CERT}" || ! -f "${GITLAB_CA_CERT}" ]]; then
+  if [[ -z "${GITLAB_CA_CERT:-}" || ! -f "${GITLAB_CA_CERT}" ]]; then
     err "❌ CA 파일을 찾을 수 없음: ${GITLAB_CA_CERT:-<empty>}"
-    err "   (주의) 이 파일은 'k8s-master' 로컬에 있어야 합니다."
+    echo "   - .env.gitops-lab의 GITLAB_CA_CERT 경로 확인"
+    echo "   - 또는 이 스크립트 실행 머신에 CA 파일이 있어야 함"
     exit 1
   fi
 
