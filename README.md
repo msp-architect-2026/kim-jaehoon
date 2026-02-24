@@ -19,6 +19,7 @@
 ## 🗺️ Architecture & Workflow
 ![Architecture Diagram](./docs/images/app_flow.png) 
 ![Architecture Diagram](./docs/images/k8s-node-roles.png) 
+![Architecture Diagram](./docs/images/cicd-gitops-platform.png) 
 
 ---
 
