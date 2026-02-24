@@ -5,11 +5,14 @@
 온프레미스(kubeadm) 환경에서 코드 푸시부터 배포, 모니터링, 알림(Slack)까지 이어지는 GitOps 기반 운영 플랫폼입니다. 수동 개입을 최소화하고 상태를 선언적으로 관리(Self-Heal)하여 인프라의 신뢰성을 높였습니다.
 
 ## 🛠️ Tech Stack
-* **Infra:** ☸️ Kubernetes (kubeadm, On-Prem)
-* **CI/CD:** 🦊 GitLab CI ➔ 🐳 Container Registry ➔ 🐙 Argo CD
-* **Observability:** 📊 Prometheus & Loki ➔ 📈 Grafana ➔ 🔔 Alertmanager
-* **Communication:** 💬 Slack Webhook
-*(💡 팁: 이 부분은 GitHub Readme 뱃지(Shields.io 등)를 활용해 깔끔한 아이콘으로 대체하시면 가시성이 더 좋아집니다.)*
+<p>
+  <img src="https://img.shields.io/badge/kubernetes-326CE5?style=flat-square&logo=kubernetes&logoColor=white"/>
+  <img src="https://img.shields.io/badge/gitlab-FC6D26?style=flat-square&logo=gitlab&logoColor=white"/>
+  <img src="https://img.shields.io/badge/argo%20cd-EF7B4D?style=flat-square&logo=argo&logoColor=white"/>
+  <img src="https://img.shields.io/badge/prometheus-E6522C?style=flat-square&logo=prometheus&logoColor=white"/>
+  <img src="https://img.shields.io/badge/grafana-F46800?style=flat-square&logo=grafana&logoColor=white"/>
+  <img src="https://img.shields.io/badge/slack-4A154B?style=flat-square&logo=slack&logoColor=white"/>
+</p>
 
 ## 💻 Live Action
 ![Demo](./docs/images/demo.gif)
