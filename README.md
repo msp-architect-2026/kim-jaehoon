@@ -1,4 +1,5 @@
 # 🏗️ On-Prem GitOps Microservices Platform
+
 > Google Online Boutique 기반 MSA K8s 운영 자동화 및 관측성(Observability) 통합 파이프라인
 
 ## 🎯 Project Overview
@@ -16,19 +17,28 @@
 ## 💻 Live Action
 ![Demo](./docs/images/online-boutique-home.png)
 
-## 🗺️ Architecture & Workflow
+---
 
-### Application Flow
-![Application Flow](./docs/images/app_flow.png)
+## 🗺️ Master Architecture Blueprint
 
-### K8s Node Roles
-![K8s Node Roles](./docs/images/k8s-node-roles.png)
+> [!TIP]
+> **Full-Stack GitOps Architecture**
+> 플랫폼 서버(CI/CD Hub)와 Kubernetes 클러스터(Runtime)를 분리하여 설계한 통합 데이터 흐름도입니다.
 
-### CI/CD & GitOps Platform
-![CI/CD & GitOps](./docs/images/cicd-gitops-platform.png)
+[![Master Architecture](./docs/images/master-architecture.png)](./docs/images/master-architecture.png)
+*(※ 위 이미지 경로 `[./docs/images/...]` 부분을 1위로 선정한 통합 아키텍처 이미지 경로로 수정해 주세요.)*
+
+### 📌 Core Features
+* **Automated CI/CD:** GitLab CI를 통한 이미지 빌드 및 Argo CD 기반의 선언적(Declarative) 배포
+* **Traffic Routing:** MetalLB와 Ingress-NGINX를 통한 최적화된 외부 트래픽 인입 경로 제공
+* **Observability:** Prometheus, Loki, Promtail을 활용한 중앙 집중식 모니터링 및 Slack 알림 연동
 
 ---
 
-## 📚 Documentation
-상세 구축 가이드, 아키텍처 설계 배경 및 트러블슈팅 기록은 Wiki에서 관리합니다.
-- [🏠 Wiki Home](https://github.com/msp-architect-2026/kim-jaehoon/wiki)
+## 📚 Documentation & Deep Dive
+
+아키텍처 설계 배경, 컴포넌트별 세부 구성, 트러블슈팅 기록 등 상세한 엔지니어링 문서는 Wiki에서 제공합니다.
+
+* [🏠 Wiki Home](https://github.com/msp-architect-2026/kim-jaehoon/wiki)
+* [🖥️ Infrastructure Architecture](https://github.com/msp-architect-2026/kim-jaehoon/wiki/Infrastructure-Architecture)
+* [📦 Application Architecture](https://github.com/msp-architect-2026/kim-jaehoon/wiki/Application-Architecture)
