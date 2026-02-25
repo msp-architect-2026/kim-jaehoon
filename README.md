@@ -25,8 +25,7 @@
 > **Full-Stack GitOps Architecture**
 > 플랫폼 서버(CI/CD Hub)와 Kubernetes 클러스터(Runtime)를 분리하여 설계한 통합 데이터 흐름도입니다.
 
-[![Master Architecture](./docs/imagesmainarchitecture.png)](./docs/images/mainarchitecture.png)
-*(※ 위 이미지 경로 `[./docs/images/...]` 부분을 1위로 선정한 통합 아키텍처 이미지 경로로 수정해 주세요.)*
+[![Master Architecture](./docs/images/mainarchitecture.png)](./docs/images/mainarchitecture.png)
 
 ### 📌 Core Features
 * **Automated CI/CD:** GitLab CI를 통한 이미지 빌드 및 Argo CD 기반의 선언적(Declarative) 배포
