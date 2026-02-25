@@ -31,7 +31,4 @@
 
 ## 📚 Documentation
 상세 구축 가이드, 아키텍처 설계 배경 및 트러블슈팅 기록은 Wiki에서 관리합니다.
-
-* [Wiki Home (구축 절차 및 Runbook)](https://github.com/msp-architect-2026/kim-jaehoon/wiki)
-* [Engineering Decisions (도입 배경 및 의사결정)](위키링크를_여기에_넣으세요)
-* [Troubleshooting Log (이슈 원인 분석 및 해결 과정)](https://github.com/msp-architect-2026/kim-jaehoon/wiki/TroubleshootingLog)
+- [🏠 Wiki Home](https://github.com/msp-architect-2026/kim-jaehoon/wiki)
