@@ -21,8 +21,7 @@
 
 ## 🗺️ Master Architecture Blueprint
 
-> [!TIP]
-> **Full-Stack GitOps Architecture**
+
 > 플랫폼 서버(CI/CD Hub)와 Kubernetes 클러스터(Runtime)를 분리하여 설계한 통합 데이터 흐름도입니다.
 
 [![Master Architecture](./docs/images/mainarchitecture.png)](./docs/images/mainarchitecture.png)
