@@ -1,42 +1,62 @@
-# 🏗️ On-Prem GitOps Microservices Platform
+</details>
 
-> Google Online Boutique 기반 MSA K8s 운영 자동화 및 관측성(Observability) 통합 파이프라인
+---
 
-## 🎯 Project Overview
-온프레미스(kubeadm) 환경에서 코드 푸시부터 배포, 모니터링, 알림(Slack)까지 이어지는 GitOps 기반 운영 플랫폼입니다. 수동 개입을 최소화하고 상태를 선언적으로 관리(Self-Heal)하여 인프라의 신뢰성을 높였습니다.
+## ✨ Core Features
+
+### ① GitOps 기반 선언적 배포 자동화
+
+GitLab CI가 이미지를 빌드해 레지스트리에 올리면, Argo CD가 gitops-repo 변경을 감지해 클러스터에 자동으로 Sync합니다. `Server-Side Apply(SSA)` 방식을 적용해 선언된 상태와 실제 상태가 다를 경우 자동으로 Self-Heal합니다.
+
+### ② MetalLB + Ingress-NGINX 트래픽 라우팅
+
+클라우드 없이 온프레미스에서 `LoadBalancer` 타입 서비스를 사용하기 위해 MetalLB를 도입했습니다. Ingress-NGINX가 외부 트래픽을 받아 내부 마이크로서비스로 최적 경로로 전달합니다.
+
+### ③ 중앙 집중식 Observability 스택
+
+Promtail이 모든 Pod의 로그를 수집해 Loki로 전송하고, Prometheus가 메트릭을 스크레이핑합니다. 모든 데이터는 Grafana 대시보드에서 통합 시각화되며, 임계값 초과 시 AlertManager가 Slack으로 자동 알림을 전송합니다.
+
+### ④ 11개 마이크로서비스 동시 운영
+
+Google Online Boutique 기반의 11개 서비스를 kubeadm으로 구성한 온프레미스 클러스터에서 운영합니다. 서비스 간 통신은 gRPC 기반으로 처리됩니다.
+
+---
 
 ## 🛠️ Tech Stack
-<div align="left">
-  <img src="https://img.shields.io/badge/kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white">
-  <img src="https://img.shields.io/badge/gitlab-FC6D26?style=for-the-badge&logo=gitlab&logoColor=white">
-  <img src="https://img.shields.io/badge/argo%20cd-EF7B4D?style=for-the-badge&logo=argo&logoColor=white">
-  <img src="https://img.shields.io/badge/prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white">
-  <img src="https://img.shields.io/badge/grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white">
+
+| Category | Technologies |
+|----------|-------------|
+| **Container Orchestration** | Kubernetes (kubeadm), Helm |
+| **CI/CD** | GitLab CI, Argo CD |
+| **Container** | Docker, GitLab Container Registry |
+| **Networking** | MetalLB, Ingress-NGINX |
+| **Observability** | Prometheus, Grafana, Loki, Promtail |
+| **Notification** | Slack (AlertManager 연동) |
+
+---
+
+## 🖥️ Application Screenshot
+
+> 11개 마이크로서비스로 구동되는 Online Boutique 쇼핑몰 프론트엔드
+
+![Online Boutique](./docs/images/online-boutique-home.png)
+
+---
+
+## 📚 상세 문서 (Wiki)
+
+아키텍처 설계 배경, 컴포넌트별 세부 구성, 트러블슈팅 기록은 Wiki에서 제공합니다.
+
+| 문서 | 내용 |
+|------|------|
+| [🏠 Wiki Home](https://github.com/your-repo/wiki) | 전체 문서 목차 |
+| [🖥️ Infrastructure Architecture](https://github.com/your-repo/wiki/Infrastructure-Architecture) | 클러스터 구성, 네트워크 설계 |
+| [📦 Application Architecture](https://github.com/your-repo/wiki/Application-Architecture) | 마이크로서비스 구조, gRPC 통신 |
+
+---
+
+<div align="center">
+
+**개인 프로젝트** · kubeadm 기반 온프레미스 · 11개 마이크로서비스
+
 </div>
-
-## 💻 Live Action
-![Demo](./docs/images/online-boutique-home.png)
-
----
-
-## 🗺️ Master Architecture Blueprint
-
-
-> 플랫폼 서버(CI/CD Hub)와 Kubernetes 클러스터(Runtime)를 분리하여 설계한 통합 데이터 흐름도입니다.
-
-[![Master Architecture](./docs/images/mainarchitecture.png)](./docs/images/mainarchitecture.png)
-
-### 📌 Core Features
-* **Automated CI/CD:** GitLab CI를 통한 이미지 빌드 및 Argo CD 기반의 선언적(Declarative) 배포
-* **Traffic Routing:** MetalLB와 Ingress-NGINX를 통한 최적화된 외부 트래픽 인입 경로 제공
-* **Observability:** Prometheus, Loki, Promtail을 활용한 중앙 집중식 모니터링 및 Slack 알림 연동
-
----
-
-## 📚 Documentation & Deep Dive
-
-아키텍처 설계 배경, 컴포넌트별 세부 구성, 트러블슈팅 기록 등 상세한 엔지니어링 문서는 Wiki에서 제공합니다.
-
-* [🏠 Wiki Home](https://github.com/msp-architect-2026/kim-jaehoon/wiki)
-* [🖥️ Infrastructure Architecture](https://github.com/msp-architect-2026/kim-jaehoon/wiki/Infrastructure-Architecture)
-* [📦 Application Architecture](https://github.com/msp-architect-2026/kim-jaehoon/wiki/Application-Architecture)
