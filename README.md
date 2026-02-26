@@ -1,5 +1,4 @@
 
-[Uploading README (1).md…]()
 <div align="center">
 
 # 🏗️ On-Prem GitOps Microservices Platform
