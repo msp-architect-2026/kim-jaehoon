@@ -32,13 +32,6 @@
 * **Observability:** Prometheus, Loki, Promtail을 활용한 중앙 집중식 모니터링 및 Slack 알림 연동
 
 ---
-## 🧱 Environment
-
-**DevOps Platform Server**: GitLab · Registry · Runner · Grafana  
-**Kubernetes Cluster**: 1 Control Plane + 2 Worker (VM)  
-**OS**: Ubuntu 22.04 LTS · **Runtime**: containerd · **K8s**: kubeadm (v1.xx)  
-**Networking**: MetalLB(L2) → Ingress-NGINX(L7)  
-**Observability**: Prometheus · Loki · Grafana Alerting → **Slack(Webhook)**
 
 ## 📚 Documentation & Deep Dive
 
