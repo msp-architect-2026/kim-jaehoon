@@ -5,7 +5,6 @@
 **코드 푸시부터 빌드·배포·모니터링·알림까지 — 온프레미스 환경의 GitOps 기반 운영 파이프라인**
 
 > 클라우드 없이, 온프레미스 환경에서 CI/CD · GitOps · Observability 스택을 1인으로 직접 설계하고 구축한 프로젝트입니다.
-
 `2025.02.26 ~ 2025.03.12 · 2주 · 1인 프로젝트`
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 [![GitLab CI](https://img.shields.io/badge/GitLab_CI-FC6D26?style=for-the-badge&logo=gitlab&logoColor=white)](https://gitlab.com/)
