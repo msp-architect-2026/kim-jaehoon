@@ -152,6 +152,6 @@ Google Online Boutique 기반의 11개 서비스를 kubeadm으로 구성한 온�
 
 <div align="center">
 
-개인 프로젝트 · kubeadm 기반 온프레미스 · 11개 마이크로서비스
+
 
 </div>
