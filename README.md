@@ -1,11 +1,10 @@
+
 <div align="center">
 
 # 🏗️ On-Prem GitOps Microservices Platform
 
 **코드 푸시부터 빌드·배포·모니터링·알림까지 — 온프레미스 환경의 GitOps 기반 운영 파이프라인**
 
-> 클라우드 없이, 온프레미스 환경에서 CI/CD · GitOps · Observability 스택을 1인으로 직접 설계하고 구축한 프로젝트입니다.
-`2025.02.26 ~ 2025.03.12 · 2주 · 1인 프로젝트`
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 [![GitLab CI](https://img.shields.io/badge/GitLab_CI-FC6D26?style=for-the-badge&logo=gitlab&logoColor=white)](https://gitlab.com/)
 [![Argo CD](https://img.shields.io/badge/Argo_CD-EF7B4D?style=for-the-badge&logo=argo&logoColor=white)](https://argoproj.github.io/cd/)
@@ -20,6 +19,10 @@
 ---
 
 ## 💡 왜 이 프로젝트를 만들었나
+
+> 클라우드 없이, 온프레미스 환경에서 CI/CD · GitOps · Observability 스택을 1인으로 직접 설계하고 구축한 프로젝트입니다.
+
+`2025.02.26 ~ 2025.03.12 · 2주 · 1인 프로젝트`
 
 온프레미스 환경에서 마이크로서비스를 운영할 때, 배포·장애 감지·인프라 변경 추적 모두 사람이 직접 개입해야 했습니다. 이 프로젝트는 그 수동 개입을 제거하기 위해 설계했습니다. GitOps 원칙으로 인프라를 선언적으로 관리하고, CI/CD 파이프라인으로 배포 흐름을 자동화하며, Observability 스택으로 시스템 상태를 항상 가시화합니다.
 
