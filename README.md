@@ -1,6 +1,5 @@
 
 <div align="center">
-# 프로젝트 기간: 2026-02-26 ~ 2026-03-12
 # 🏗️ On-Prem GitOps Microservices Platform
 
 **코드 푸시부터 빌드·배포·모니터링·알림까지 — 온프레미스 환경의 GitOps 기반 운영 파이프라인**
