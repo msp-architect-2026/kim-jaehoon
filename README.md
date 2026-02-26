@@ -1,4 +1,4 @@
-[README (3).md](https://github.com/user-attachments/files/25577171/README.3.md)
+
 <div align="center">
 
 # 🏗️ On-Prem GitOps Microservices Platform
