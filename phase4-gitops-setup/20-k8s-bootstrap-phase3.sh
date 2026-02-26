@@ -67,6 +67,7 @@ echo "=================================================="
 echo " Phase 3 Bootstrap (Ingress-NGINX + Argo CD) + GitLab HTTPS(사설 CA) 대응"
 echo " - (옵션) Helm 설치"
 echo " - (옵션) ingress-nginx 설치(Helm, LoadBalancer)   # MetalLB 사용 시 권장"
+echo " - (옵션) MetalLB 설치 (L2 로드밸런서)              # 신규 추가"
 echo " - Argo CD 설치(SSA)/NodePort 노출/초기 비번 출력"
 echo " - app namespace + registry pull secret + SA patch"
 echo " - (옵션) Argo repo credential secret"
@@ -86,6 +87,10 @@ DO_HELM="${DO_HELM:-N}"
 # ✅ 문구 수정: NodePort → LoadBalancer
 read -rp "Q0-2) ingress-nginx 설치할까요? (Helm, LoadBalancer) (y/N): " DO_ING
 DO_ING="${DO_ING:-N}"
+
+# ✅ 신규 추가: MetalLB 설치 여부
+read -rp "Q0-3) MetalLB 설치할까요? (y/N): " DO_METALLB
+DO_METALLB="${DO_METALLB:-N}"
 
 read -rp "Q1) Argo CD namespace [기본 argocd]: " ARGO_NS
 ARGO_NS="${ARGO_NS:-argocd}"
@@ -135,6 +140,7 @@ warn " Argo NS         : $ARGO_NS"
 warn " Install ArgoCD  : $DO_ARGO"
 warn " NodePort expose : $DO_NODEPORT"
 warn " Install ingress : $DO_ING (LoadBalancer)"
+warn " Install MetalLB : $DO_METALLB"
 warn " Target NS       : $TARGET_NS"
 warn " Argo TLS CA     : $DO_ARGO_TLS (CA=${GITLAB_CA_CERT:-<none>})"
 warn " Make App        : $DO_APP"
@@ -160,6 +166,20 @@ if [[ "$DO_HELM" =~ ^[Yy]$ ]]; then
   fi
 else
   warn "⏭ Helm 설치 스킵"
+fi
+
+# ---------- (옵션) MetalLB 설치 (신규 추가) ----------
+if [[ "$DO_METALLB" =~ ^[Yy]$ ]]; then
+  say "[추가] MetalLB 설치 (v0.14.3)"
+  kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.3/config/manifests/metallb-native.yaml >/dev/null
+
+  say "⏳ MetalLB controller/speaker 기동 대기..."
+  kubectl -n metallb-system rollout status deploy/controller --timeout=120s || true
+  kubectl -n metallb-system rollout status daemonset/speaker --timeout=120s || true
+  say "✅ MetalLB 설치 완료."
+  warn "⚠️ (주의) 설치만 완료되었으며, 추후 사용할 IP 대역(IPAddressPool) 설정은 직접 하셔야 합니다."
+else
+  warn "⏭ MetalLB 설치 스킵"
 fi
 
 # ---------- (옵션) ingress-nginx 설치 ----------
@@ -343,4 +363,4 @@ echo "  kubectl -n ${ARGO_NS} get applications 2>/dev/null || true"
 echo "  kubectl -n ${ARGO_NS} get events --sort-by=.metadata.creationTimestamp | tail -n 30"
 echo
 warn "⚠️ (중요) Registry가 self-signed HTTPS면, 각 K8s 노드(containerd/docker)가 CA를 신뢰해야 image pull이 성공합니다."
-warn "    → 이 스크립트(kubectl)만으로는 해결되지 않을 수 있음(노드 OS/런타임 설정 필요)"
+warn "   → 이 스크립트(kubectl)만으로는 해결되지 않을 수 있음(노드 OS/런타임 설정 필요)"
