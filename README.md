@@ -34,14 +34,16 @@
 
 [![Master Architecture](./docs/images/mainarchitecture.png)](./docs/images/mainarchitecture.png)
 
-### 📌 Key Engineering Decisions
-인프라 엔지니어로서 다음과 같은 기술적 의사결정을 통해 시스템의 안정성과 확장성을 확보했습니다.
+## 📌 Key Engineering Decisions
 
-* **The "Hard Way" via kubeadm:** 클라우드 벤더 종속성(Lock-in)을 탈피하고 K8s 컴포넌트(API Server, etcd, Scheduler)의 내부 동작 원리와 CNI 플러그인(Calico/Flannel) 통신 구조를 딥다이브하기 위해 kubeadm으로 클러스터를 직접 프로비저닝했습니다.
-* **GitOps 기반 Continuous Delivery:** Argo CD를 도입하여 Git Repository를 유일한 진실의 원천(Single Source of Truth)으로 삼았습니다. 이를 통해 코드 기반의 인프라 상태 동기화를 달성하고, 배포 롤백 및 시각적 추적성을 확보했습니다.
-* **On-Premise Traffic Routing:** 온프레미스 환경의 한계인 외부 Load Balancer 부재를 해결하기 위해 `MetalLB`를 L2 모드로 구성하고, `Ingress-NGINX`를 통해 마이크로서비스 간의 L7 라우팅 최적화 경로를 설계했습니다.
-* **Full-stack Observability:** Metric(Prometheus)과 Log(Loki) 데이터를 Grafana로 통합 대시보드화하여 관측성을 극대화했습니다. 
+인프라 구축 시 직면한 한계를 해결하기 위한 문제 해결 중심의 기술적 선택입니다.
 
+| Topic | Challenge | Engineering Action |
+| :--- | :--- | :--- |
+| **K8s Implementation** | 클라우드 종속성 탈피 및 내부 구조 이해 필요 | **"The Hard Way"**: `kubeadm` 으로 Control Plane 및 CNI 직접 구성 |
+| **Traffic Routing** | 온프레미스 환경의 로드밸런서(LB) 부재 | **MetalLB(L2)**와 **Ingress-NGINX** 연동으로 외부 통신 경로 확보 |
+| **Operational Efficiency** | 수동 배포로 인한 구성 드리프트(Drift) 발생 | **GitOps**: Argo CD 도입으로 인프라 상태 동기화 및 가시성 확보 |
+| **Visibility** | 분산된 마이크로서비스의 장애 전파 파악 어려움 | **Unified Logging**: Loki-Promtail-Grafana 통합 관측성 체계 구축 |
 ---
 
 ## 📚 Documentation & Deep Dive
