@@ -1,4 +1,4 @@
-
+[README (2).md](https://github.com/user-attachments/files/25577096/README.2.md)
 <div align="center">
 
 # 🏗️ On-Prem GitOps Microservices Platform
@@ -26,7 +26,7 @@
 - 서비스에 이상이 생기면 → 로그를 직접 뒤져 원인을 찾아야 했으며
 - 인프라 상태가 바뀌면 → 어디서 무엇이 달라졌는지 추적이 어려웠습니다
 
-이 프로젝트는 그 모든 수동 개입을 제거하기 위해 설계했습니다. **GitOps 원칙으로 인프라를 선언적으로 관리**하고, **CI/CD 파이프라인으로 배포를 완전 자동화**하며, **Observability 스택으로 시스템 상태를 항상 가시화**합니다.
+이 프로젝트는 그 수동 개입을 줄이기 위해 설계했습니다. GitOps 원칙으로 인프라를 선언적으로 관리하고, CI/CD 파이프라인으로 배포 흐름을 자동화하며, Observability 스택으로 시스템 상태를 항상 가시화합니다.
 
 ---
 
@@ -34,10 +34,10 @@
 
 | 항목 | Before | After |
 |------|--------|-------|
-| 🚀 배포 방식 | 수동 `kubectl apply` | **코드 푸시 → 자동 빌드 · 배포 파이프라인 구축** |
-| 🧩 운영 마이크로서비스 | — | **11개 서비스** 동시 운영 |
-| 🔍 장애 감지 | 직접 로그 확인 | **Prometheus Alert → Slack 자동 알림** |
-| 🔄 인프라 자가복구 | 수동 재배포 | **Argo CD Self-Heal** 자동 복구 |
+| 🚀 배포 방식 | 수동 `kubectl apply` | 코드 푸시 → 자동 빌드 · 배포 파이프라인 구축 |
+| 🧩 운영 마이크로서비스 | — | 11개 서비스 동시 운영 |
+| 🔍 장애 감지 | 직접 로그 확인 | Prometheus Alert → Slack 자동 알림 |
+| 🔄 인프라 자가복구 | 수동 재배포 | Argo CD Self-Heal 자동 복구 |
 
 ---
 
@@ -100,14 +100,36 @@ Google Online Boutique 기반의 11개 서비스를 kubeadm으로 구성한 온�
 
 ## 🛠️ Tech Stack
 
-| Category | Technologies |
-|----------|-------------|
-| **Container Orchestration** | Kubernetes (kubeadm), Helm |
-| **CI/CD** | GitLab CI, Argo CD |
-| **Container** | Docker, GitLab Container Registry |
-| **Networking** | MetalLB, Ingress-NGINX |
-| **Observability** | Prometheus, Grafana, Loki, Promtail |
-| **Notification** | Slack (AlertManager 연동) |
+**Container Orchestration**
+
+![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=flat-square&logo=kubernetes&logoColor=white)
+![Helm](https://img.shields.io/badge/Helm-0F1689?style=flat-square&logo=helm&logoColor=white)
+
+**CI/CD**
+
+![GitLab CI](https://img.shields.io/badge/GitLab_CI-FC6D26?style=flat-square&logo=gitlab&logoColor=white)
+![Argo CD](https://img.shields.io/badge/Argo_CD-EF7B4D?style=flat-square&logo=argo&logoColor=white)
+
+**Container**
+
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
+![GitLab Registry](https://img.shields.io/badge/GitLab_Registry-FC6D26?style=flat-square&logo=gitlab&logoColor=white)
+
+**Networking**
+
+![MetalLB](https://img.shields.io/badge/MetalLB-326CE5?style=flat-square&logo=kubernetes&logoColor=white)
+![Ingress NGINX](https://img.shields.io/badge/Ingress_NGINX-009639?style=flat-square&logo=nginx&logoColor=white)
+
+**Observability**
+
+![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat-square&logo=prometheus&logoColor=white)
+![Grafana](https://img.shields.io/badge/Grafana-F46800?style=flat-square&logo=grafana&logoColor=white)
+![Loki](https://img.shields.io/badge/Loki-F5A623?style=flat-square&logo=grafana&logoColor=white)
+![Promtail](https://img.shields.io/badge/Promtail-F5A623?style=flat-square&logo=grafana&logoColor=white)
+
+**Notification**
+
+![Slack](https://img.shields.io/badge/Slack-4A154B?style=flat-square&logo=slack&logoColor=white)
 
 ---
 
@@ -133,6 +155,6 @@ Google Online Boutique 기반의 11개 서비스를 kubeadm으로 구성한 온�
 
 <div align="center">
 
-**개인 프로젝트** · kubeadm 기반 온프레미스 · 11개 마이크로서비스
+개인 프로젝트 · kubeadm 기반 온프레미스 · 11개 마이크로서비스
 
 </div>
