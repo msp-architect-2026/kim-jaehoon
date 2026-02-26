@@ -124,9 +124,9 @@ Google Online Boutique 기반의 11개 서비스를 kubeadm으로 구성한 온�
 
 | 문서 | 내용 |
 |------|------|
-| [🏠 Wiki Home](https://github.com/your-repo/wiki) | 전체 문서 목차 |
-| [🖥️ Infrastructure Architecture](https://github.com/your-repo/wiki/Infrastructure-Architecture) | 클러스터 구성, 네트워크 설계 |
-| [📦 Application Architecture](https://github.com/your-repo/wiki/Application-Architecture) | 마이크로서비스 구조, gRPC 통신 |
+| [🏠 Wiki Home](https://github.com/msp-architect-2026/kim-jaehoon/wiki) | 전체 문서 목차 |
+| [🖥️ Infrastructure Architecture](https://github.com/msp-architect-2026/kim-jaehoon/wiki/Infrastructure-Architecture) | 클러스터 구성, 네트워크 설계 |
+| [📦 Application Architecture](https://github.com/msp-architect-2026/kim-jaehoon/wiki/Application-Architecture) | 마이크로서비스 구조, gRPC 통신 |
 
 ---
 
