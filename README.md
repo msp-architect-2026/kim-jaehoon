@@ -8,13 +8,13 @@
 * **Impact:** 선언적 상태 관리(SSoT)를 통해 인프라 구성의 멱등성을 보장하고, 어플리케이션 배포부터 모니터링 경고(Alert)까지의 라이프사이클을 100% 자동화하여 운영 개입을 최소화했습니다.
 
 ## 🛠️ Tech Stack
-단순 툴킷의 나열이 아닌, 목적에 따른 계층별(Layer) 인프라 스택 구성입니다.
-
-* **Orchestration & Compute:** `Kubernetes (kubeadm)`, `Docker`
-* **CI/CD & GitOps:** `GitLab CI`, `Argo CD`
-* **Traffic & Networking:** `MetalLB (L4)`, `Ingress-NGINX (L7)`, `Calico/Flannel (CNI)`
-* **Observability:** `Prometheus`, `Grafana`, `Loki`, `Promtail`
-* **Storage:** `NFS Dynamic Provisioner` (상태 저장형 데이터 관리)
+| Layer | Stack | Key Responsibility |
+| :--- | :--- | :--- |
+| **Orchestration** | <img src="https://img.shields.io/badge/kubernetes-326CE5?style=flat-square&logo=kubernetes&logoColor=white"> | `kubeadm` 기반 클러스터 수명 주기 관리 및 자원 추상화 |
+| **CI/CD / GitOps** | <img src="https://img.shields.io/badge/gitlab-FC6D26?style=flat-square&logo=gitlab&logoColor=white"> <img src="https://img.shields.io/badge/argo%20cd-EF7B4D?style=flat-square&logo=argo&logoColor=white"> | CI 파이프라인 자동화 및 GitOps 기반 선언적 배포(SSoT) |
+| **Networking** | <img src="https://img.shields.io/badge/NGINX-009639?style=flat-square&logo=nginx&logoColor=white"> <img src="https://img.shields.io/badge/Calico-24292E?style=flat-square&logo=databricks&logoColor=white"> | L4(MetalLB) / L7(Ingress) 트래픽 라우팅 및 Pod 간 통신 보안 |
+| **Observability** | <img src="https://img.shields.io/badge/prometheus-E6522C?style=flat-square&logo=prometheus&logoColor=white"> <img src="https://img.shields.io/badge/grafana-F46800?style=flat-square&logo=grafana&logoColor=white"> | 메트릭/로그 통합 대시보드 및 임계치 기반 운영 알림 |
+| **Storage** | <img src="https://img.shields.io/badge/NFS-blue?style=flat-square"> | `NFS Dynamic Provisioner`를 이용한 상태 저장형(Stateful) 데이터 관리 |
 
 <div align="left">
   <img src="https://img.shields.io/badge/kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white">
