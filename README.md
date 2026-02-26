@@ -1,4 +1,3 @@
-
 <div align="center">
 
 # 🏗️ On-Prem GitOps Microservices Platform
@@ -93,6 +92,25 @@ Promtail이 모든 Pod의 로그를 수집해 Loki로 전송하고, Prometheus�
 ### ④ 11개 마이크로서비스 동시 운영
 
 Google Online Boutique 기반의 11개 서비스를 kubeadm으로 구성한 온프레미스 클러스터에서 운영합니다. 서비스 간 통신은 gRPC 기반으로 처리됩니다.
+
+---
+
+## 🤖 Automation Scripts
+
+플랫폼 전체 구축 과정을 8개의 자동화 스크립트로 구현했습니다. 노드 초기설정부터 GitLab HTTPS 구축, Argo CD 설치, MetalLB IP 충돌 검사까지 순서대로 실행 가능하도록 설계했습니다.
+
+| 스크립트 | 설명 |
+|----------|------|
+| `node-setup.sh` | K8s 노드 공통 초기설정 (Ubuntu, containerd, kubeadm) |
+| `k8s-master-init.sh` | 마스터 노드 초기화 (kubeadm init, Calico CNI, Join 명령어 저장) |
+| `gitlab-https-bootstrap.sh` | GitLab HTTPS 구축 (로컬 CA 생성, Registry, Runner) |
+| `cleanup-gitlab.sh` | GitLab 전체 삭제 및 시스템 복구 |
+| `k8s-bootstrap-phase3.sh` | Ingress-NGINX + Argo CD + MetalLB 설치 |
+| `repo-auto.sh` | GitLab 프로젝트·토큰·CI 변수 자동 생성 |
+| `metallb-ippool.sh` | MetalLB IP Pool 할당 및 네트워크 충돌 검사 |
+| `install-ca-containerd.sh` | OS + Containerd CA 인증서 신뢰 등록 |
+
+> 상세 사용법 및 설계 의도는 [Wiki - Build & Deploy](https://github.com/msp-architect-2026/kim-jaehoon/wiki/Build-&-Deploy)에서 확인할 수 있습니다.
 
 ---
 
