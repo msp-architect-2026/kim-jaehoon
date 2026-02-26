@@ -1,4 +1,4 @@
-[README (2).md](https://github.com/user-attachments/files/25577096/README.2.md)
+[README (3).md](https://github.com/user-attachments/files/25577171/README.3.md)
 <div align="center">
 
 # 🏗️ On-Prem GitOps Microservices Platform
@@ -126,10 +126,7 @@ Google Online Boutique 기반의 11개 서비스를 kubeadm으로 구성한 온�
 ![Grafana](https://img.shields.io/badge/Grafana-F46800?style=flat-square&logo=grafana&logoColor=white)
 ![Loki](https://img.shields.io/badge/Loki-F5A623?style=flat-square&logo=grafana&logoColor=white)
 ![Promtail](https://img.shields.io/badge/Promtail-F5A623?style=flat-square&logo=grafana&logoColor=white)
-
-**Notification**
-
-![Slack](https://img.shields.io/badge/Slack-4A154B?style=flat-square&logo=slack&logoColor=white)
+![AlertManager](https://img.shields.io/badge/AlertManager-E6522C?style=flat-square&logo=prometheus&logoColor=white)
 
 ---
 
