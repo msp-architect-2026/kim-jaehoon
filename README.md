@@ -20,7 +20,7 @@
 
 ## 💡 왜 이 프로젝트를 만들었나
 
-온프레미스 환경에서 마이크로서비스를 운영할 때 가장 큰 문제는 "사람이 직접 개입해야 하는 순간이 너무 많다" 는 것입니다.
+온프레미스 환경에서 마이크로서비스를 운영할 때 가장 큰 문제는 **"사람이 직접 개입해야 하는 순간이 너무 많다"** 는 것입니다.
 
 - 코드를 수정하면 → 누군가가 직접 이미지를 빌드하고 배포해야 했고
 - 서비스에 이상이 생기면 → 로그를 직접 뒤져 원인을 찾아야 했으며
@@ -100,33 +100,13 @@ Google Online Boutique 기반의 11개 서비스를 kubeadm으로 구성한 온�
 
 ## 🛠️ Tech Stack
 
-**Container Orchestration**
-
-![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=flat-square&logo=kubernetes&logoColor=white)
-![Helm](https://img.shields.io/badge/Helm-0F1689?style=flat-square&logo=helm&logoColor=white)
-
-**CI/CD**
-
-![GitLab CI](https://img.shields.io/badge/GitLab_CI-FC6D26?style=flat-square&logo=gitlab&logoColor=white)
-![Argo CD](https://img.shields.io/badge/Argo_CD-EF7B4D?style=flat-square&logo=argo&logoColor=white)
-
-**Container**
-
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
-![GitLab Registry](https://img.shields.io/badge/GitLab_Registry-FC6D26?style=flat-square&logo=gitlab&logoColor=white)
-
-**Networking**
-
-![MetalLB](https://img.shields.io/badge/MetalLB-326CE5?style=flat-square&logo=kubernetes&logoColor=white)
-![Ingress NGINX](https://img.shields.io/badge/Ingress_NGINX-009639?style=flat-square&logo=nginx&logoColor=white)
-
-**Observability**
-
-![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat-square&logo=prometheus&logoColor=white)
-![Grafana](https://img.shields.io/badge/Grafana-F46800?style=flat-square&logo=grafana&logoColor=white)
-![Loki](https://img.shields.io/badge/Loki-F5A623?style=flat-square&logo=grafana&logoColor=white)
-![Promtail](https://img.shields.io/badge/Promtail-F5A623?style=flat-square&logo=grafana&logoColor=white)
-![AlertManager](https://img.shields.io/badge/AlertManager-E6522C?style=flat-square&logo=prometheus&logoColor=white)
+| Category | Technologies |
+|----------|-------------|
+| Container Orchestration | ![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=flat-square&logo=kubernetes&logoColor=white) ![Helm](https://img.shields.io/badge/Helm-0F1689?style=flat-square&logo=helm&logoColor=white) |
+| CI/CD | ![GitLab CI](https://img.shields.io/badge/GitLab_CI-FC6D26?style=flat-square&logo=gitlab&logoColor=white) ![Argo CD](https://img.shields.io/badge/Argo_CD-EF7B4D?style=flat-square&logo=argo&logoColor=white) |
+| Container | ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white) ![GitLab Registry](https://img.shields.io/badge/GitLab_Registry-FC6D26?style=flat-square&logo=gitlab&logoColor=white) |
+| Networking | ![MetalLB](https://img.shields.io/badge/MetalLB-326CE5?style=flat-square&logo=kubernetes&logoColor=white) ![Ingress NGINX](https://img.shields.io/badge/Ingress_NGINX-009639?style=flat-square&logo=nginx&logoColor=white) |
+| Observability | ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat-square&logo=prometheus&logoColor=white) ![Grafana](https://img.shields.io/badge/Grafana-F46800?style=flat-square&logo=grafana&logoColor=white) ![Loki](https://img.shields.io/badge/Loki-F5A623?style=flat-square&logo=grafana&logoColor=white) ![Promtail](https://img.shields.io/badge/Promtail-F5A623?style=flat-square&logo=grafana&logoColor=white) ![AlertManager](https://img.shields.io/badge/AlertManager-E6522C?style=flat-square&logo=prometheus&logoColor=white) |
 
 ---
 
