@@ -16,7 +16,7 @@ need awk
 ENV_FILE="${1:-./.env.gitops-lab}"
 if [[ ! -f "$ENV_FILE" ]]; then
   err "❌ env 파일 없음: $ENV_FILE"
-  echo "   예) ./20-k8s-bootstrap-phase3-https.sh ./.env.gitops-lab"
+  echo "   예) ./20-k8s-bootstrap-phase3.sh ./.env.gitops-lab"
   exit 1
 fi
 # shellcheck disable=SC1090
@@ -25,7 +25,7 @@ source "$ENV_FILE"
 # ---------- safety checks for env ----------
 : "${REGISTRY_HOSTPORT:=}"
 : "${GITOPS_REPO_URL:=}"
-: "${GITLAB_CA_CERT:=}"   # (선택) GitLab bootstrap에서 저장해둔 CA 경로
+: "${GITLAB_CA_CERT:=}"
 
 if [[ -z "$REGISTRY_HOSTPORT" ]]; then
   err "❌ REGISTRY_HOSTPORT env가 비어있음(.env.gitops-lab 확인)"
@@ -45,30 +45,27 @@ if [[ "$GITOPS_REPO_URL" =~ ^http:// ]]; then
   warn "⚠️ GITOPS_REPO_URL이 http:// 입니다. GitLab이 HTTPS면 https:// 로 바꾸는 게 보통 맞습니다."
 fi
 
-# ---------- kubectl preflight (sudo/루트로 실행해도 최대한 살아남기) ----------
+# ---------- kubectl preflight ----------
 kube_ok() { kubectl get nodes >/dev/null 2>&1; }
 
 if ! kube_ok; then
   if [[ -f /etc/kubernetes/admin.conf ]]; then
-    warn "⚠️ kubectl 연결 실패 → /etc/kubernetes/admin.conf로 재시도(KUBECONFIG 설정)"
+    warn "⚠️ kubectl 연결 실패 → /etc/kubernetes/admin.conf로 재시도"
     export KUBECONFIG=/etc/kubernetes/admin.conf
   fi
 fi
 
 if ! kube_ok; then
   err "❌ kubectl이 클러스터에 연결되지 않음"
-  echo "   - 현재 사용자 kubeconfig 확인"
-  echo "   - 또는 root로 실행 중이면: export KUBECONFIG=/etc/kubernetes/admin.conf"
   exit 1
 fi
 
 CTX="$(kubectl config current-context 2>/dev/null || true)"
 echo "=================================================="
-echo " Phase 3 Bootstrap (Ingress-NGINX + Argo CD + MetalLB)"
+echo " Phase 3 Bootstrap (Ingress-NGINX + Argo CD) + GitLab HTTPS(사설 CA) 대응"
 echo " - (옵션) Helm 설치"
-echo " - (옵션) MetalLB 설치 (네트워크 VIP 분배기)"
-echo " - (옵션) ingress-nginx 설치(Helm, LoadBalancer 적용)"
-echo " - Argo CD 설치(SSA) / 보안을 위해 ClusterIP 유지"
+echo " - (옵션) ingress-nginx 설치(Helm, NodePort)"
+echo " - Argo CD 설치(SSA)/NodePort 노출/초기 비번 출력"
 echo " - app namespace + registry pull secret + SA patch"
 echo " - (옵션) Argo repo credential secret"
 echo " - (옵션) Argo TLS CA 등록(argocd-tls-certs-cm) + repo-server restart"
@@ -84,11 +81,8 @@ echo
 read -rp "Q0-1) Helm 설치할까요? (y/N): " DO_HELM
 DO_HELM="${DO_HELM:-N}"
 
-read -rp "Q0-2) ingress-nginx를 LoadBalancer 타입으로 설치할까요? (y/N): " DO_ING
+read -rp "Q0-2) ingress-nginx 설치할까요? (Helm, NodePort) (y/N): " DO_ING
 DO_ING="${DO_ING:-N}"
-
-read -rp "Q0-3) MetalLB 설치할까요? (y/N): " DO_METALLB
-DO_METALLB="${DO_METALLB:-N}"
 
 read -rp "Q1) Argo CD namespace [기본 argocd]: " ARGO_NS
 ARGO_NS="${ARGO_NS:-argocd}"
@@ -96,33 +90,35 @@ ARGO_NS="${ARGO_NS:-argocd}"
 read -rp "Q2) Argo CD 설치할까요? (SSA로 apply) (y/N): " DO_ARGO
 DO_ARGO="${DO_ARGO:-N}"
 
-# Argo CD 포트 노출 질문 제거됨 (ClusterIP 강제)
+read -rp "Q3) Argo CD UI를 NodePort로 노출할까요? (y/N): " DO_NODEPORT
+DO_NODEPORT="${DO_NODEPORT:-N}"
 
-read -rp "Q3) 배포(namespace) [기본 demo]: " TARGET_NS
+read -rp "Q4) 배포(namespace) [기본 demo]: " TARGET_NS
 TARGET_NS="${TARGET_NS:-demo}"
 
-read -rp "Q4) Argo Application까지 만들까요? (y/N): " DO_APP
+read -rp "Q5) Argo Application까지 만들까요? (y/N): " DO_APP
 DO_APP="${DO_APP:-N}"
 
+# [수정] 기본 경로를 apps/boutique/overlays/dev 로 변경
 APP_NAME="demo-dev"
-GITOPS_PATH="apps/demo/overlays/dev"
+GITOPS_PATH="apps/boutique/overlays/dev"
 if [[ "$DO_APP" =~ ^[Yy]$ ]]; then
-  read -rp "Q4-1) Application 이름 [기본 demo-dev]: " APP_NAME
+  read -rp "Q5-1) Application 이름 [기본 demo-dev]: " APP_NAME
   APP_NAME="${APP_NAME:-demo-dev}"
-  read -rp "Q4-2) GitOps path [기본 apps/demo/overlays/dev]: " GITOPS_PATH
-  GITOPS_PATH="${GITOPS_PATH:-apps/demo/overlays/dev}"
+  read -rp "Q5-2) GitOps path [기본 apps/boutique/overlays/dev]: " GITOPS_PATH
+  GITOPS_PATH="${GITOPS_PATH:-apps/boutique/overlays/dev}"
 fi
 
 # --- (옵션) Argo TLS CA 등록 여부 ---
 DO_ARGO_TLS="N"
 if [[ "$GITOPS_REPO_URL" =~ ^https:// ]]; then
   if [[ -z "${GITLAB_CA_CERT:-}" ]]; then
-    read -rp "Q4-3) (권장) GitLab CA 인증서 경로(Argo TLS 등록용) [엔터=스킵]: " GITLAB_CA_CERT
+    read -rp "Q5-3) (권장) GitLab CA 인증서 경로(Argo TLS 등록용) [엔터=스킵]: " GITLAB_CA_CERT
     GITLAB_CA_CERT="${GITLAB_CA_CERT:-}"
   fi
 
   if [[ -n "${GITLAB_CA_CERT:-}" ]]; then
-    read -rp "Q4-4) (권장) Argo(repo-server)에 GitLab CA 등록할까요? (y/N): " DO_ARGO_TLS
+    read -rp "Q5-4) (권장) Argo(repo-server)에 GitLab CA 등록할까요? (y/N): " DO_ARGO_TLS
     DO_ARGO_TLS="${DO_ARGO_TLS:-N}"
   fi
 else
@@ -134,9 +130,9 @@ warn "-------------------- 확인 --------------------"
 warn " GitLab Registry : ${REGISTRY_HOSTPORT:-<empty>}"
 warn " GitOps Repo URL : ${GITOPS_REPO_URL:-<empty>}"
 warn " Argo NS         : $ARGO_NS"
-warn " Install ArgoCD  : $DO_ARGO (ClusterIP)"
-warn " Install ingress : $DO_ING (LoadBalancer)"
-warn " Install MetalLB : $DO_METALLB"
+warn " Install ArgoCD  : $DO_ARGO"
+warn " NodePort expose : $DO_NODEPORT"
+warn " Install ingress : $DO_ING"
 warn " Target NS       : $TARGET_NS"
 warn " Argo TLS CA     : $DO_ARGO_TLS (CA=${GITLAB_CA_CERT:-<none>})"
 warn " Make App        : $DO_APP"
@@ -164,33 +160,18 @@ else
   warn "⏭ Helm 설치 스킵"
 fi
 
-# ---------- (옵션) MetalLB 설치 ----------
-if [[ "$DO_METALLB" =~ ^[Yy]$ ]]; then
-  say "[추가] MetalLB 설치 (v0.14.3)"
-  kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.3/config/manifests/metallb-native.yaml >/dev/null
-
-  say "⏳ MetalLB controller/speaker 기동 대기..."
-  kubectl -n metallb-system rollout status deploy/controller --timeout=120s || true
-  kubectl -n metallb-system rollout status daemonset/speaker --timeout=120s || true
-  say "✅ MetalLB 설치 완료."
-  warn "⚠️ (주의) 설치만 완료되었으며, IP Pool은 별도 스크립트로 학원망 충돌 검사 후 세팅하세요."
-else
-  warn "⏭ MetalLB 설치 스킵"
-fi
-
-# ---------- (옵션) ingress-nginx 설치 (LoadBalancer) ----------
+# ---------- (옵션) ingress-nginx 설치 ----------
 if [[ "$DO_ING" =~ ^[Yy]$ ]]; then
   need helm
-  say "[1/7] ingress-nginx 설치(Helm, LoadBalancer 타입 적용)"
+  say "[1/7] ingress-nginx 설치(NodePort)"
   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx >/dev/null 2>&1 || true
   helm repo update >/dev/null 2>&1 || true
 
-  # ✅ 핵심: ingress-nginx-controller를 LoadBalancer 타입으로 배포
   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
     -n ingress-nginx --create-namespace \
-    --set controller.service.type=LoadBalancer >/dev/null
+    --set controller.service.type=NodePort >/dev/null
 
-  say "✅ ingress-nginx 설치 완료. Service 확인:"
+  say "✅ ingress-nginx 설치 완료"
   kubectl -n ingress-nginx get svc ingress-nginx-controller || true
 else
   warn "⏭ ingress-nginx 설치 스킵"
@@ -200,8 +181,6 @@ fi
 ns_phase="$(kubectl get ns "$ARGO_NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
 if [[ "$ns_phase" == "Terminating" ]]; then
   err "❌ namespace '$ARGO_NS' 가 Terminating 상태입니다."
-  echo "   이 상태에서 설치하면 'forbidden: namespace is being terminated' 로 터집니다."
-  echo "   먼저 namespace 삭제가 완전히 끝나도록 정리/복구 후 다시 실행하세요."
   exit 1
 fi
 
@@ -211,8 +190,6 @@ if [[ "$DO_ARGO" =~ ^[Yy]$ ]]; then
   kubectl get ns "$ARGO_NS" >/dev/null 2>&1 || kubectl create ns "$ARGO_NS" >/dev/null
 
   ARGO_MANIFEST="https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
-
-  # SSA로 적용
   kubectl apply --server-side --force-conflicts -n "$ARGO_NS" -f "$ARGO_MANIFEST" >/dev/null
 
   say "⏳ ArgoCD rollout 대기(최대 15분)"
@@ -221,32 +198,42 @@ if [[ "$DO_ARGO" =~ ^[Yy]$ ]]; then
   kubectl -n "$ARGO_NS" rollout status deploy/argocd-redis --timeout=900s || true
   kubectl -n "$ARGO_NS" rollout status deploy/argocd-applicationset-controller --timeout=900s || true
 
-  say "✅ ArgoCD apply 완료 (보안을 위해 ClusterIP 유지)"
+  say "✅ ArgoCD apply 완료"
 else
-  warn "⏭ Argo CD 설치 스킵(이미 설치돼있다고 가정)"
-  kubectl get ns "$ARGO_NS" >/dev/null 2>&1 || { err "❌ Argo NS($ARGO_NS) 없음. Q2에서 y로 설치하거나 먼저 설치하세요."; exit 1; }
+  warn "⏭ Argo CD 설치 스킵"
+  kubectl get ns "$ARGO_NS" >/dev/null 2>&1 || { err "❌ Argo NS($ARGO_NS) 없음."; exit 1; }
 fi
 
-# ---------- 초기 비번 출력 및 터널링 안내 ----------
-say "[3/7] Argo CD 초기 비밀번호 확인"
-if kubectl -n "$ARGO_NS" get secret argocd-initial-admin-secret >/dev/null 2>&1; then
-  PASS="$(kubectl -n "$ARGO_NS" get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"
-  warn "🔑 초기 admin 비밀번호: $PASS"
-  warn "※ 로그인 후 비밀번호 변경 권장"
+# ---------- NodePort 노출 + 초기 비번 ----------
+if [[ "$DO_NODEPORT" =~ ^[Yy]$ ]]; then
+  say "[3/7] argocd-server Service를 NodePort로 변경"
+  kubectl -n "$ARGO_NS" patch svc argocd-server -p '{"spec":{"type":"NodePort"}}' >/dev/null || true
+
+  NODEPORT_HTTPS="$(kubectl -n "$ARGO_NS" get svc argocd-server \
+    -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}' 2>/dev/null || true)"
+  NODEPORT_HTTP="$(kubectl -n "$ARGO_NS" get svc argocd-server \
+    -o jsonpath='{.spec.ports[?(@.name=="http")].nodePort}' 2>/dev/null || true)"
+  say "✅ NodePort http=${NODEPORT_HTTP:-?} / https=${NODEPORT_HTTPS:-?}"
+
+  if kubectl -n "$ARGO_NS" get secret argocd-initial-admin-secret >/dev/null 2>&1; then
+    PASS="$(kubectl -n "$ARGO_NS" get secret argocd-initial-admin-secret \
+      -o jsonpath='{.data.password}' | base64 -d)"
+    warn "초기 admin 비밀번호: $PASS"
+    warn "※ 로그인 후 비밀번호 변경 권장"
+  else
+    warn "⚠️ initial secret이 없음(이미 변경/삭제되었을 수 있음)"
+  fi
 else
-  warn "⚠️ initial secret이 없음(이미 변경/삭제되었을 수 있음)"
+  warn "⏭ NodePort 노출 스킵"
 fi
 
-# ---------- (권장) Argo repo-server에 GitLab CA 등록 (HTTPS self-signed 대응) ----------
+# ---------- Argo repo-server에 GitLab CA 등록 ----------
 if [[ "$DO_ARGO_TLS" =~ ^[Yy]$ ]]; then
   if [[ -z "${GITLAB_CA_CERT:-}" || ! -f "${GITLAB_CA_CERT}" ]]; then
     err "❌ CA 파일을 찾을 수 없음: ${GITLAB_CA_CERT:-<empty>}"
-    echo "   - .env.gitops-lab의 GITLAB_CA_CERT 경로 확인"
-    echo "   - 또는 이 스크립트 실행 머신에 CA 파일이 있어야 함"
     exit 1
   fi
 
-  # repo URL에서 host만 추출
   _hostport="$(echo "$GITOPS_REPO_URL" | sed -E 's#^https?://##' | sed -E 's#/.*##')"
   GITLAB_HOST_FOR_ARGO="${_hostport%%:*}"
 
@@ -258,7 +245,7 @@ if [[ "$DO_ARGO_TLS" =~ ^[Yy]$ ]]; then
   kubectl -n "$ARGO_NS" rollout restart deploy/argocd-repo-server >/dev/null || true
   say "✅ Argo repo-server 재시작 완료(CA 반영)"
 else
-  warn "⏭ Argo TLS CA 등록 스킵(HTTPS self-signed면 이후 x509로 터질 수 있음)"
+  warn "⏭ Argo TLS CA 등록 스킵"
 fi
 
 # ---------- app namespace + registry pull secret ----------
@@ -276,6 +263,11 @@ kubectl -n "$TARGET_NS" create secret docker-registry gitlab-regcred \
   --docker-password="$REGISTRY_PULL_TOKEN" \
   --docker-email="none@example.com" >/dev/null
 
+# [수정] default SA만이 아닌 전체 SA에 imagePullSecrets 패치
+# Online Boutique는 서비스별 개별 SA를 사용하므로 전체 SA에 적용 필요
+# 단, 이 시점에는 Argo CD sync 전이라 default SA만 존재함
+# → Argo CD sync 후 별도로 재실행하거나 아래 주석 해제하여 사용
+say "[5-1/7] default SA imagePullSecrets 패치"
 kubectl -n "$TARGET_NS" patch serviceaccount default \
   -p '{"imagePullSecrets":[{"name":"gitlab-regcred"}]}' >/dev/null || true
 
@@ -285,7 +277,7 @@ kubectl -n "$TARGET_NS" get sa default -o yaml | sed -n '/imagePullSecrets/,+3p'
 
 # ---------- (옵션) Argo repo secret ----------
 echo
-read -rp "Q5) Argo가 private gitops-repo 접근하도록 repo secret 만들까요? (y/N): " DO_REPO
+read -rp "Q6) Argo가 private gitops-repo 접근하도록 repo secret 만들까요? (y/N): " DO_REPO
 DO_REPO="${DO_REPO:-N}"
 
 if [[ "$DO_REPO" =~ ^[Yy]$ ]]; then
@@ -304,7 +296,8 @@ if [[ "$DO_REPO" =~ ^[Yy]$ ]]; then
     --from-literal=password="$ARGO_GITOPS_READ_TOKEN" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
-  kubectl -n "$ARGO_NS" label secret "$SECRET_NAME" argocd.argoproj.io/secret-type=repository --overwrite >/dev/null
+  kubectl -n "$ARGO_NS" label secret "$SECRET_NAME" \
+    argocd.argoproj.io/secret-type=repository --overwrite >/dev/null
   say "✅ repo secret 적용 완료: $SECRET_NAME"
 else
   warn "⏭ repo secret 스킵"
@@ -338,17 +331,24 @@ spec:
 YAML
   kubectl apply -f "$TMP"
   say "🎉 Application 생성/갱신 완료: ${APP_NAME}"
+  say ""
+  say "⚠️  [중요] Argo CD sync 완료 후 아래 명령어로 전체 SA에 imagePullSecrets 패치하세요."
+  say "   Online Boutique는 서비스별 개별 SA를 사용하므로 반드시 필요합니다."
+  say ""
+  say "   for sa in \$(kubectl -n ${TARGET_NS} get sa -o jsonpath='{.items[*].metadata.name}'); do"
+  say "     kubectl -n ${TARGET_NS} patch sa \"\$sa\" --type merge \\"
+  say "       -p '{\"imagePullSecrets\":[{\"name\":\"gitlab-regcred\"}]}'"
+  say "   done"
+  say "   kubectl -n ${TARGET_NS} rollout restart deploy"
 else
   warn "⏭ Application 스킵"
 fi
 
 echo
-say "============================================================"
-say "🎉 Bootstrap 완료! (Argo CD는 안전하게 보호되고 있습니다)"
-echo "▶ Argo CD 접속 터널링 명령어 (마스터 노드에서 실행):"
-warn "  kubectl port-forward svc/argocd-server -n ${ARGO_NS} 8080:443 --address 0.0.0.0"
-echo "  (브라우저 접속: https://<마스터노드_IP>:8080)"
-say "============================================================"
+say "끝! 지금 확인하면 좋은 것들:"
+echo "  kubectl -n ${ARGO_NS} get pods -o wide"
+echo "  kubectl -n ${ARGO_NS} get svc"
+echo "  kubectl -n ${ARGO_NS} get applications 2>/dev/null || true"
+echo "  kubectl -n ${ARGO_NS} get events --sort-by=.metadata.creationTimestamp | tail -n 30"
 echo
-warn "⚠️ (중요) Registry가 self-signed HTTPS면, 각 K8s 노드(containerd)가 CA를 신뢰해야 image pull이 성공합니다."
-warn "   → 사전 작업된 install-ca-all.sh를 노드에서 실행했는지 확인하세요."
+warn "⚠️ Registry가 self-signed HTTPS면, 각 K8s 노드(containerd)가 CA를 신뢰해야 image pull이 성공합니다."
