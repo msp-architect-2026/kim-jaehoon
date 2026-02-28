@@ -35,6 +35,18 @@ ENV_FILE="${1:-./.env.gitops-lab}"
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 
+# ==============================================================================
+# [안전망] GITLAB_CA_CERT 상대 경로 → 절대 경로 변환
+# 이 스크립트는 내부에서 cd "$WORK_DIR" 으로 디렉터리를 이동하므로
+# 상대 경로가 .env에 남아있으면 GIT_SSL_CAINFO / TLS_OPTS 경로를 잃어 SSL 오류 발생
+# → source 직후 .env 파일 위치 기준으로 절대 경로 변환하여 방어
+# ==============================================================================
+if [[ -n "${GITLAB_CA_CERT:-}" && "${GITLAB_CA_CERT}" != /* ]]; then
+  _env_dir="$(cd "$(dirname "$(realpath "$ENV_FILE")")" && pwd)"
+  GITLAB_CA_CERT="$(realpath "${_env_dir}/${GITLAB_CA_CERT}")"
+  warn "⚠️  GITLAB_CA_CERT 상대 경로 감지 → 절대 경로로 변환: ${GITLAB_CA_CERT}"
+fi
+
 # ---------- 필수 변수 검증 ----------
 : "${GITLAB_URL:?GITLAB_URL이 env에 없습니다}"
 : "${GITLAB_ADMIN_TOKEN:?GITLAB_ADMIN_TOKEN이 env에 없습니다
@@ -51,6 +63,10 @@ if [[ "$GITLAB_URL" =~ ^http:// ]]; then
 fi
 
 # ---------- CA 파일 경로 결정 ----------
+# 우선순위:
+#   1. env의 GITLAB_CA_CERT (위에서 이미 절대 경로로 변환 완료)
+#   2. install-ca-all.sh 가 등록한 표준 경로
+#   3. 홈 디렉터리에 수동 복사한 경우
 resolve_ca_cert() {
   local candidates=(
     "${GITLAB_CA_CERT:-}"
@@ -59,9 +75,14 @@ resolve_ca_cert() {
     "$HOME/ca.crt"
   )
   for path in "${candidates[@]}"; do
-    if [[ -n "$path" && -f "$path" ]]; then
-      echo "$path"
-      return 0
+    # 절대 경로 변환 후 존재 확인 (혹시 남아있는 상대 경로 방어)
+    if [[ -n "$path" ]]; then
+      local abs_path
+      abs_path="$(realpath "$path" 2>/dev/null || true)"
+      if [[ -n "$abs_path" && -f "$abs_path" ]]; then
+        echo "$abs_path"
+        return 0
+      fi
     fi
   done
   return 1
@@ -106,14 +127,15 @@ OK="${OK:-n}"
 }
 
 # ---------- TLS / git SSL 설정 ----------
-# API 호출: GITLAB_ADMIN_TOKEN 사용 (api scope)
-# git push : GITOPS_PUSH_TOKEN 사용 (write_repository scope)
+# CA_CERT는 resolve_ca_cert()에서 이미 절대 경로로 확인됨
+# cd 이후에도 경로를 잃지 않음
 TLS_OPTS=(--cacert "$CA_CERT" -L)
 ADMIN_HDR=(-H "PRIVATE-TOKEN: ${GITLAB_ADMIN_TOKEN}")
 export GIT_SSL_CAINFO="$CA_CERT"
 git config --global http.sslCAInfo "$CA_CERT"
+say "✅ git SSL CA 설정 완료: ${CA_CERT}"
 
-# ---------- GitLab API 연결 확인 (ADMIN_TOKEN으로) ----------
+# ---------- GitLab API 연결 확인 ----------
 say "🔎 GitLab API 연결 확인..."
 VER=$(curl -fsSL "${TLS_OPTS[@]}" "${ADMIN_HDR[@]}" \
   "${API}/version" | jq -r '.version // "unknown"')
@@ -138,7 +160,7 @@ if [[ -z "$APP_ID" || "$APP_ID" == "null" ]]; then
 fi
 say "✅ app-repo project_id: ${APP_ID}"
 
-# ---------- CI Variable upsert 함수 (ADMIN_TOKEN 사용) ----------
+# ---------- CI Variable upsert 함수 ----------
 upsert_ci_var() {
   local proj_id="$1"
   local key="$2"
@@ -201,9 +223,7 @@ if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
   warn "   파이프라인 실행 전에 반드시 해결해야 합니다."
 fi
 
-# ---------- 3. .gitlab-ci.yml push (GITLAB_ADMIN_TOKEN 사용) ----------
-# GITOPS_PUSH_TOKEN은 gitops-repo 전용 → app-repo 접근 권한 없음
-# GITLAB_ADMIN_TOKEN(api scope)은 모든 프로젝트 git 접근 가능
+# ---------- 3. .gitlab-ci.yml push ----------
 say "\n[3/3] .gitlab-ci.yml 완성본 app-repo에 push 중..."
 WORK_DIR="/tmp/ci-yml-push-$$"
 rm -rf "$WORK_DIR"
