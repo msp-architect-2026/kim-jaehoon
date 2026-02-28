@@ -30,6 +30,18 @@ ENV_FILE="${1:-./.env.gitops-lab}"
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 
+# ==============================================================================
+# [안전망] GITLAB_CA_CERT 상대 경로 → 절대 경로 변환
+# 이 스크립트는 내부에서 cd "$WORK_DIR" 으로 디렉터리를 이동하므로
+# 상대 경로가 .env에 남아있으면 git push 시 SSL CA 오류 발생
+# → source 직후 .env 파일 위치 기준으로 절대 경로 변환하여 방어
+# ==============================================================================
+if [[ -n "${GITLAB_CA_CERT:-}" && "${GITLAB_CA_CERT}" != /* ]]; then
+  _env_dir="$(cd "$(dirname "$(realpath "$ENV_FILE")")" && pwd)"
+  GITLAB_CA_CERT="$(realpath "${_env_dir}/${GITLAB_CA_CERT}")"
+  warn "⚠️  GITLAB_CA_CERT 상대 경로 감지 → 절대 경로로 변환: ${GITLAB_CA_CERT}"
+fi
+
 : "${GITLAB_URL:?}"
 : "${GITLAB_CA_CERT:?}"
 : "${GITOPS_PUSH_USER:?}"
@@ -59,6 +71,7 @@ echo "=================================================="
 warn "  GitLab URL    : ${GITLAB_URL}"
 warn "  gitops-repo   : ${GROUP}/${GITOPS_PROJECT}"
 warn "  Registry      : ${OUR_REGISTRY}"
+warn "  CA 인증서     : ${GITLAB_CA_CERT}"
 echo ""
 read -rp "계속할까요? (y/n) [기본 n]: " OK
 OK="${OK:-n}"
@@ -102,8 +115,6 @@ mkdir -p apps/boutique/base
 mkdir -p apps/boutique/overlays/dev
 
 # ── base/kustomization.yaml ──
-# Online Boutique의 원본 쿠버네티스 매니페스트를 원격 참조
-# 로컬에 yaml을 복사하지 않고, upstream raw URL을 resource로 지정 (경량 관리)
 cat > apps/boutique/base/kustomization.yaml <<EOF
 # ==============================================================================
 # base/kustomization.yaml
@@ -144,7 +155,6 @@ EOF
 say "  ✅ base/kustomization.yaml 생성"
 
 # ── overlays/dev/kustomization.yaml ──
-# CI 파이프라인이 이 파일의 images[].newTag 를 업데이트함
 say "\n[3/4] Kustomize overlay(dev) 구성 중..."
 
 # images 블록 동적 생성
@@ -256,4 +266,3 @@ echo ""
 echo "  → 다음 단계: ./32-setup-gitlab-ci.sh 실행"
 echo "              .gitlab-ci.yml 완성본을 app-repo에 push"
 echo "=================================================="
-
