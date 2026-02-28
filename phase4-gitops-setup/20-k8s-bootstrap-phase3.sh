@@ -3,7 +3,8 @@
 # 20-k8s-bootstrap-phase3.sh
 # 역할: K8s 클러스터 Phase 3 부트스트랩
 #   - (옵션) Helm 설치
-#   - (옵션) ingress-nginx 설치
+#   - (옵션) ingress-nginx 설치 (NodePort / LoadBalancer 선택)
+#             └─ LoadBalancer 선택 시 MetalLB 자동 설치 (전제조건)
 #   - (옵션) Argo CD 설치
 #   - (옵션) Argo CD NodePort 노출
 #   - namespace + imagePullSecret 생성
@@ -82,27 +83,42 @@ OK="${OK:-n}"
 [[ "$OK" =~ ^[Yy]$ ]] || { echo "취소"; exit 0; }
 
 echo
-read -rp "Q0-1) Helm 설치할까요? (y/N): " DO_HELM;        DO_HELM="${DO_HELM:-N}"
-read -rp "Q0-2) ingress-nginx 설치할까요? (y/N): "  DO_ING;  DO_ING="${DO_ING:-N}"
-read -rp "Q1)   Argo CD namespace [기본 argocd]: "  ARGO_NS; ARGO_NS="${ARGO_NS:-argocd}"
-read -rp "Q2)   Argo CD 설치할까요? (y/N): "        DO_ARGO; DO_ARGO="${DO_ARGO:-N}"
-read -rp "Q3)   Argo CD UI NodePort 노출할까요? (y/N): " DO_NODEPORT; DO_NODEPORT="${DO_NODEPORT:-N}"
+read -rp "Q0-1) Helm 설치할까요? (y/N): "          DO_HELM;     DO_HELM="${DO_HELM:-N}"
+read -rp "Q0-2) ingress-nginx 설치할까요? (y/N): " DO_ING;      DO_ING="${DO_ING:-N}"
 
-# [수정] 기본값 boutique로 변경
+# ---------- ingress-nginx Service 타입 선택 ----------
+ING_SVC_TYPE="NodePort"
+if [[ "$DO_ING" =~ ^[Yy]$ ]]; then
+  echo
+  echo "  ingress-nginx Service 타입을 선택하세요."
+  echo "    1) NodePort     - 외부 LB 없이 노드IP:NodePort로 직접 접근"
+  echo "    2) LoadBalancer - MetalLB 등 외부 LB 환경에서 EXTERNAL-IP 자동 할당"
+  read -rp "  선택 [기본 1]: " ING_SVC_CHOICE
+  ING_SVC_CHOICE="${ING_SVC_CHOICE:-1}"
+  case "$ING_SVC_CHOICE" in
+    1) ING_SVC_TYPE="NodePort"     ;;
+    2) ING_SVC_TYPE="LoadBalancer" ;;
+    *) warn "⚠️  잘못된 선택 → 기본값 NodePort 사용"; ING_SVC_TYPE="NodePort" ;;
+  esac
+  say "  ✅ ingress-nginx Service 타입: ${ING_SVC_TYPE}"
+  echo
+fi
+
+read -rp "Q1)   Argo CD namespace [기본 argocd]: "        ARGO_NS;     ARGO_NS="${ARGO_NS:-argocd}"
+read -rp "Q2)   Argo CD 설치할까요? (y/N): "              DO_ARGO;     DO_ARGO="${DO_ARGO:-N}"
+read -rp "Q3)   Argo CD UI NodePort 노출할까요? (y/N): "  DO_NODEPORT; DO_NODEPORT="${DO_NODEPORT:-N}"
+
 read -rp "Q4)   배포 namespace [기본 boutique]: " TARGET_NS
 TARGET_NS="${TARGET_NS:-boutique}"
 
 read -rp "Q5)   Argo Application 생성할까요? (y/N): " DO_APP
 DO_APP="${DO_APP:-N}"
 
-# [수정] 기본값 boutique 기준으로 변경
 APP_NAME="boutique-dev"
 GITOPS_PATH="apps/boutique/overlays/dev"
 if [[ "$DO_APP" =~ ^[Yy]$ ]]; then
-  read -rp "Q5-1) Application 이름 [기본 boutique-dev]: " APP_NAME
-  APP_NAME="${APP_NAME:-boutique-dev}"
-  read -rp "Q5-2) GitOps path [기본 apps/boutique/overlays/dev]: " GITOPS_PATH
-  GITOPS_PATH="${GITOPS_PATH:-apps/boutique/overlays/dev}"
+  read -rp "Q5-1) Application 이름 [기본 boutique-dev]: "            APP_NAME;    APP_NAME="${APP_NAME:-boutique-dev}"
+  read -rp "Q5-2) GitOps path [기본 apps/boutique/overlays/dev]: " GITOPS_PATH; GITOPS_PATH="${GITOPS_PATH:-apps/boutique/overlays/dev}"
 fi
 
 # Argo TLS CA 등록 여부
@@ -125,18 +141,24 @@ DO_REPO="${DO_REPO:-N}"
 
 echo
 warn "-------------------- 확인 --------------------"
-warn " GitLab Registry : ${REGISTRY_HOSTPORT}"
-warn " GitOps Repo URL : ${GITOPS_REPO_URL}"
-warn " Argo NS         : ${ARGO_NS}"
-warn " Install ArgoCD  : ${DO_ARGO}"
-warn " NodePort expose : ${DO_NODEPORT}"
-warn " Install ingress : ${DO_ING}"
-warn " Target NS       : ${TARGET_NS}"
-warn " Argo TLS CA     : ${DO_ARGO_TLS} (CA=${GITLAB_CA_CERT:-<none>})"
-warn " Repo Secret     : ${DO_REPO}"
-warn " Make App        : ${DO_APP}"
-warn " App Name        : ${APP_NAME}"
-warn " GitOps Path     : ${GITOPS_PATH}"
+warn " GitLab Registry  : ${REGISTRY_HOSTPORT}"
+warn " GitOps Repo URL  : ${GITOPS_REPO_URL}"
+warn " Argo NS          : ${ARGO_NS}"
+warn " Install ArgoCD   : ${DO_ARGO}"
+warn " NodePort expose  : ${DO_NODEPORT}"
+warn " Install ingress  : ${DO_ING}"
+if [[ "$DO_ING" =~ ^[Yy]$ ]]; then
+warn " Ingress SVC Type : ${ING_SVC_TYPE}"
+  if [[ "$ING_SVC_TYPE" == "LoadBalancer" ]]; then
+warn " Install MetalLB  : Y (LoadBalancer 선택 시 자동)"
+  fi
+fi
+warn " Target NS        : ${TARGET_NS}"
+warn " Argo TLS CA      : ${DO_ARGO_TLS} (CA=${GITLAB_CA_CERT:-<none>})"
+warn " Repo Secret      : ${DO_REPO}"
+warn " Make App         : ${DO_APP}"
+warn " App Name         : ${APP_NAME}"
+warn " GitOps Path      : ${GITOPS_PATH}"
 warn "--------------------------------------------"
 read -rp "진행할까요? (y/n) [기본 n]: " CONFIRM
 CONFIRM="${CONFIRM:-n}"
@@ -159,16 +181,40 @@ else
   warn "⏭ Helm 설치 스킵"
 fi
 
+# ---------- MetalLB 설치 (LoadBalancer 선택 시 전제조건) ----------
+if [[ "$DO_ING" =~ ^[Yy]$ && "$ING_SVC_TYPE" == "LoadBalancer" ]]; then
+  say "[1-pre] MetalLB 설치 (LoadBalancer 모드 전제조건)"
+  METALLB_VERSION="v0.14.3"
+
+  # 이미 설치된 경우 스킵
+  if kubectl -n metallb-system get deploy controller >/dev/null 2>&1; then
+    say "✅ MetalLB 이미 설치됨 (스킵)"
+  else
+    warn "➕ MetalLB ${METALLB_VERSION} 설치 중..."
+    kubectl apply -f "https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml" >/dev/null
+    say "⏳ MetalLB controller rollout 대기(최대 3분)..."
+    kubectl -n metallb-system rollout status deploy/controller --timeout=180s
+    say "⏳ MetalLB speaker rollout 대기(최대 3분)..."
+    kubectl -n metallb-system rollout status ds/speaker --timeout=180s
+    say "⏳ MetalLB webhook-server rollout 대기(최대 3분)..."
+    kubectl -n metallb-system rollout status deploy/webhook-server --timeout=180s
+    say "⏳ MetalLB webhook 소켓 준비 대기(10초)..."
+    sleep 10
+    say "✅ MetalLB 설치 완료 (${METALLB_VERSION})"
+  fi
+  echo
+fi
+
 # ---------- ingress-nginx 설치 ----------
 if [[ "$DO_ING" =~ ^[Yy]$ ]]; then
   need helm
-  say "[1/7] ingress-nginx 설치(NodePort)"
+  say "[1/7] ingress-nginx 설치 (Service 타입: ${ING_SVC_TYPE})"
   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx >/dev/null 2>&1 || true
   helm repo update >/dev/null 2>&1 || true
   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
     -n ingress-nginx --create-namespace \
-    --set controller.service.type=NodePort >/dev/null
-  say "✅ ingress-nginx 설치 완료"
+    --set controller.service.type="${ING_SVC_TYPE}" >/dev/null
+  say "✅ ingress-nginx 설치 완료 (type=${ING_SVC_TYPE})"
   kubectl -n ingress-nginx get svc ingress-nginx-controller || true
 else
   warn "⏭ ingress-nginx 설치 스킵"
@@ -188,9 +234,9 @@ if [[ "$DO_ARGO" =~ ^[Yy]$ ]]; then
   ARGO_MANIFEST="https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
   kubectl apply --server-side --force-conflicts -n "$ARGO_NS" -f "$ARGO_MANIFEST" >/dev/null
   say "⏳ Argo CD rollout 대기(최대 15분)..."
-  kubectl -n "$ARGO_NS" rollout status deploy/argocd-server              --timeout=900s || true
-  kubectl -n "$ARGO_NS" rollout status deploy/argocd-repo-server         --timeout=900s || true
-  kubectl -n "$ARGO_NS" rollout status deploy/argocd-redis               --timeout=900s || true
+  kubectl -n "$ARGO_NS" rollout status deploy/argocd-server                    --timeout=900s || true
+  kubectl -n "$ARGO_NS" rollout status deploy/argocd-repo-server               --timeout=900s || true
+  kubectl -n "$ARGO_NS" rollout status deploy/argocd-redis                     --timeout=900s || true
   kubectl -n "$ARGO_NS" rollout status deploy/argocd-applicationset-controller --timeout=900s || true
   say "✅ Argo CD 설치 완료"
 else
@@ -235,7 +281,6 @@ if [[ "$DO_ARGO_TLS" =~ ^[Yy]$ ]]; then
   kubectl -n "$ARGO_NS" create configmap argocd-tls-certs-cm \
     --from-file="${GITLAB_HOST_FOR_ARGO}=${GITLAB_CA_CERT}" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-  # 멱등: 이미 재시작 중이어도 오류 없이 진행
   kubectl -n "$ARGO_NS" rollout restart deploy/argocd-repo-server >/dev/null || true
   say "✅ Argo TLS CA 등록 완료"
 else
@@ -244,13 +289,11 @@ fi
 
 # ---------- namespace + imagePullSecret ----------
 say "[4/7] namespace 생성/확인: ${TARGET_NS}"
-# 멱등: 이미 있으면 스킵
 kubectl get ns "$TARGET_NS" >/dev/null 2>&1 || kubectl create ns "$TARGET_NS" >/dev/null
 
 say "[5/7] imagePullSecret 생성/갱신: gitlab-regcred"
 : "${REGISTRY_PULL_USER:?REGISTRY_PULL_USER env 없음}"
 : "${REGISTRY_PULL_TOKEN:?REGISTRY_PULL_TOKEN env 없음}"
-# 멱등: 삭제 후 재생성
 kubectl -n "$TARGET_NS" delete secret gitlab-regcred --ignore-not-found >/dev/null 2>&1 || true
 kubectl -n "$TARGET_NS" create secret docker-registry gitlab-regcred \
   --docker-server="$REGISTRY_HOSTPORT" \
@@ -259,7 +302,6 @@ kubectl -n "$TARGET_NS" create secret docker-registry gitlab-regcred \
   --docker-email="none@example.com" >/dev/null
 say "✅ gitlab-regcred 생성 완료"
 
-# default SA 패치 (멱등: patch는 항상 현재 상태로 덮어씀)
 kubectl -n "$TARGET_NS" patch serviceaccount default \
   -p '{"imagePullSecrets":[{"name":"gitlab-regcred"}]}' >/dev/null || true
 say "✅ default SA imagePullSecrets 패치 완료"
@@ -272,7 +314,6 @@ if [[ "$DO_REPO" =~ ^[Yy]$ ]]; then
   : "${ARGO_GITOPS_READ_USER:?ARGO_GITOPS_READ_USER env 없음}"
   : "${ARGO_GITOPS_READ_TOKEN:?ARGO_GITOPS_READ_TOKEN env 없음}"
   SECRET_NAME="repo-${GITOPS_PROJECT}"
-  # 멱등: 삭제 후 재생성
   kubectl -n "$ARGO_NS" delete secret "$SECRET_NAME" --ignore-not-found >/dev/null 2>&1 || true
   kubectl -n "$ARGO_NS" create secret generic "$SECRET_NAME" \
     --from-literal=type=git \
@@ -313,7 +354,6 @@ spec:
     syncOptions:
       - CreateNamespace=true
 YAML
-  # 멱등: apply는 없으면 생성, 있으면 업데이트
   kubectl apply -f "$TMP" >/dev/null
   say "🎉 Application 생성/갱신 완료: ${APP_NAME}"
 else
