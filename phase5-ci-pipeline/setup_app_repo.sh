@@ -28,6 +28,18 @@ fi
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 
+# ==============================================================================
+# [안전망] GITLAB_CA_CERT 상대 경로 → 절대 경로 변환
+# 이 스크립트는 내부에서 cd "$WORK_DIR" 으로 디렉터리를 이동하므로
+# 상대 경로가 .env에 남아있으면 GIT_SSL_CAINFO 경로를 잃어 SSL 오류 발생
+# → source 직후 .env 파일 위치 기준으로 절대 경로 변환하여 방어
+# ==============================================================================
+if [[ -n "${GITLAB_CA_CERT:-}" && "${GITLAB_CA_CERT}" != /* ]]; then
+  _env_dir="$(cd "$(dirname "$(realpath "$ENV_FILE")")" && pwd)"
+  GITLAB_CA_CERT="$(realpath "${_env_dir}/${GITLAB_CA_CERT}")"
+  warn "⚠️  GITLAB_CA_CERT 상대 경로 감지 → 절대 경로로 변환: ${GITLAB_CA_CERT}"
+fi
+
 # ---------- 필수 변수 검증 ----------
 : "${GITLAB_URL:?GITLAB_URL이 env에 없습니다}"
 : "${GITOPS_PUSH_USER:?GITOPS_PUSH_USER가 env에 없습니다}"
@@ -45,7 +57,7 @@ fi
 
 # ---------- CA 파일 경로 결정 ----------
 # 우선순위:
-#   1. env의 GITLAB_CA_CERT (명시된 경우)
+#   1. env의 GITLAB_CA_CERT (위에서 이미 절대 경로로 변환 완료)
 #   2. install-ca-all.sh 가 등록한 표준 경로 (Master Node 기준)
 #   3. 홈 디렉터리에 수동 복사한 경우
 resolve_ca_cert() {
@@ -56,9 +68,14 @@ resolve_ca_cert() {
     "$HOME/ca.crt"
   )
   for path in "${candidates[@]}"; do
-    if [[ -n "$path" && -f "$path" ]]; then
-      echo "$path"
-      return 0
+    # 절대 경로 변환 후 존재 확인 (혹시 남아있는 상대 경로 방어)
+    if [[ -n "$path" ]]; then
+      local abs_path
+      abs_path="$(realpath "$path" 2>/dev/null || true)"
+      if [[ -n "$abs_path" && -f "$abs_path" ]]; then
+        echo "$abs_path"
+        return 0
+      fi
     fi
   done
   return 1
@@ -103,11 +120,11 @@ OK="${OK:-n}"
 [[ "$OK" =~ ^[Yy]$ ]] || { echo "취소"; exit 0; }
 
 # ---------- git SSL 설정 ----------
-# Master Node는 OS 레벨 CA 신뢰가 이미 등록되어 있으나
-# 명시적으로 지정하여 어떤 환경에서도 동일하게 동작 보장
+# CA_CERT는 resolve_ca_cert()에서 이미 절대 경로로 확인됨
+# cd 이후에도 경로를 잃지 않음
 export GIT_SSL_CAINFO="$CA_CERT"
 git config --global http.sslCAInfo "$CA_CERT"
-say "✅ git SSL CA 설정 완료"
+say "✅ git SSL CA 설정 완료: ${CA_CERT}"
 
 # ---------- GitLab 연결 사전 확인 ----------
 say "🔎 GitLab 접속 확인 중..."
@@ -179,8 +196,6 @@ stages:
 EOF
 
 # ---------- 5. app-repo push ----------
-# GITOPS_PUSH_TOKEN은 gitops-repo 전용 → app-repo 접근 불가
-# GITLAB_ADMIN_TOKEN(api scope) 사용
 say "\n[4/4] app-repo push 중..."
 : "${GITLAB_ADMIN_TOKEN:?GITLAB_ADMIN_TOKEN이 env에 없습니다. .env.gitops-lab에 추가하세요}"
 
