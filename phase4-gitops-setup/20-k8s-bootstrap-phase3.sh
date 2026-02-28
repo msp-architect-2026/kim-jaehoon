@@ -37,6 +37,17 @@ fi
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 
+# ==============================================================================
+# [안전망] GITLAB_CA_CERT 상대 경로 → 절대 경로 변환
+# .env에 상대 경로가 저장되어 있거나 수동 편집된 경우를 방어
+# .env 파일 위치를 기준으로 절대 경로를 산출
+# ==============================================================================
+if [[ -n "${GITLAB_CA_CERT:-}" && "${GITLAB_CA_CERT}" != /* ]]; then
+  _env_dir="$(cd "$(dirname "$(realpath "$ENV_FILE")")" && pwd)"
+  GITLAB_CA_CERT="$(realpath "${_env_dir}/${GITLAB_CA_CERT}")"
+  warn "⚠️  GITLAB_CA_CERT 상대 경로 감지 → 절대 경로로 변환: ${GITLAB_CA_CERT}"
+fi
+
 # ---------- env 검증 ----------
 : "${REGISTRY_HOSTPORT:=}"
 : "${GITOPS_REPO_URL:=}"
@@ -127,6 +138,11 @@ if [[ "$GITOPS_REPO_URL" =~ ^https:// ]]; then
   if [[ -z "${GITLAB_CA_CERT:-}" ]]; then
     read -rp "Q5-3) GitLab CA 인증서 경로 [엔터=스킵]: " GITLAB_CA_CERT
     GITLAB_CA_CERT="${GITLAB_CA_CERT:-}"
+    # 대화형 입력값도 즉시 절대 경로로 변환
+    if [[ -n "$GITLAB_CA_CERT" && "$GITLAB_CA_CERT" != /* ]]; then
+      GITLAB_CA_CERT="$(realpath "$GITLAB_CA_CERT")"
+      warn "⚠️  Q5-3 상대 경로 감지 → 절대 경로로 변환: ${GITLAB_CA_CERT}"
+    fi
   fi
   if [[ -n "${GITLAB_CA_CERT:-}" ]]; then
     read -rp "Q5-4) Argo repo-server에 GitLab CA 등록할까요? (y/N): " DO_ARGO_TLS
