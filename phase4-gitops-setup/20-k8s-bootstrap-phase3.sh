@@ -196,9 +196,7 @@ if [[ "$DO_ING" =~ ^[Yy]$ && "$ING_SVC_TYPE" == "LoadBalancer" ]]; then
     kubectl -n metallb-system rollout status deploy/controller --timeout=180s
     say "⏳ MetalLB speaker rollout 대기(최대 3분)..."
     kubectl -n metallb-system rollout status ds/speaker --timeout=180s
-    say "⏳ MetalLB webhook-server rollout 대기(최대 3분)..."
-    kubectl -n metallb-system rollout status deploy/webhook-server --timeout=180s
-    say "⏳ MetalLB webhook 소켓 준비 대기(10초)..."
+    say "⏳ MetalLB controller 내부 webhook 소켓 준비 대기(10초)..."
     sleep 10
     say "✅ MetalLB 설치 완료 (${METALLB_VERSION})"
   fi
