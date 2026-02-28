@@ -49,32 +49,24 @@ fi
 
 echo "▶ 감지된 현재 IP: ${CURRENT_IP}"
 echo ""
-echo "이 노드의 역할은 무엇입니까?"
-echo "  1) Master Node (k8s-master)"
-echo "  2) Worker Node 1 (k8s-worker1)"
-echo "  3) Worker Node 2 (k8s-worker2)"
-echo "  4) 직접 입력 (Custom)"
-read -rp "선택 > " ROLE_CHOICE
-
-case "${ROLE_CHOICE}" in
-  1) MY_HOSTNAME="k8s-master" ;;
-  2) MY_HOSTNAME="k8s-worker1" ;;
-  3) MY_HOSTNAME="k8s-worker2" ;;
-  4) read -rp "사용할 호스트네임 입력: " MY_HOSTNAME ;;
-  *) err "잘못된 선택입니다."; exit 1 ;;
-esac
+read -rp "이 노드의 호스트네임을 입력하세요 (예: master, k8s-master 등): " MY_HOSTNAME
 
 hostnamectl set-hostname "${MY_HOSTNAME}"
 say "✅ 호스트네임 변경 완료: ${MY_HOSTNAME}"
 
 # --- 2/10. /etc/hosts 구성(중복 방지) ---
 echo -e "\n${YELLOW}[2/10] 클러스터 노드 정보 입력 (/etc/hosts 구성)...${NC}"
-echo "⚠️ 브릿지 모드이므로 각 노드 IP를 확인해서 입력하세요."
+echo "⚠️ 브릿지 모드이므로 각 노드 IP와 호스트네임을 직접 입력하세요."
 echo ""
 
-read -rp "마스터 노드(k8s-master)의 IP는? : " MASTER_IP
-read -rp "워커1 노드(k8s-worker1)의 IP는? : " WORKER1_IP
-read -rp "워커2 노드(k8s-worker2)의 IP는? : " WORKER2_IP
+read -rp "마스터 노드 IP: " MASTER_IP
+read -rp "마스터 노드 호스트네임: " MASTER_HOSTNAME
+
+read -rp "워커1 노드 IP: " WORKER1_IP
+read -rp "워커1 노드 호스트네임: " WORKER1_HOSTNAME
+
+read -rp "워커2 노드 IP: " WORKER2_IP
+read -rp "워커2 노드 호스트네임: " WORKER2_HOSTNAME
 
 # localhost 라인이 없으면 최상단에 보강(혹시 깨진 환경 대비)
 if ! grep -qE '^\s*127\.0\.0\.1\s+localhost\b' /etc/hosts; then
@@ -87,28 +79,32 @@ if ! grep -qE '^\s*127\.0\.0\.1\s+localhost\b' /etc/hosts; then
   rm -f "${tmp}"
 fi
 
-# 기존 k8s 엔트리 제거 후 재삽입(중복 방지)
+# 기존 k8s 클러스터 엔트리 제거 (변수 기반 동적 패턴 - 중복 방지)
 tmp="$(mktemp)"
-awk '
-  !($0 ~ /(^|\s)k8s-master(\s|$)/) &&
-  !($0 ~ /(^|\s)k8s-worker1(\s|$)/) &&
-  !($0 ~ /(^|\s)k8s-worker2(\s|$)/) &&
-  !($0 ~ /^# Kubernetes Cluster Nodes$/)
+awk -v h1="${MASTER_HOSTNAME}" \
+    -v h2="${WORKER1_HOSTNAME}" \
+    -v h3="${WORKER2_HOSTNAME}" \
+'
+  $0 ~ "(^|[[:space:]])"h1"([[:space:]]|$)" { next }
+  $0 ~ "(^|[[:space:]])"h2"([[:space:]]|$)" { next }
+  $0 ~ "(^|[[:space:]])"h3"([[:space:]]|$)" { next }
+  /^# Kubernetes Cluster Nodes$/ { next }
+  { print }
 ' /etc/hosts > "${tmp}"
 
 cat >> "${tmp}" <<EOF
 
 # Kubernetes Cluster Nodes
-${MASTER_IP} k8s-master
-${WORKER1_IP} k8s-worker1
-${WORKER2_IP} k8s-worker2
+${MASTER_IP} ${MASTER_HOSTNAME}
+${WORKER1_IP} ${WORKER1_HOSTNAME}
+${WORKER2_IP} ${WORKER2_HOSTNAME}
 EOF
 
 cat "${tmp}" > /etc/hosts
 rm -f "${tmp}"
 
 say "✅ /etc/hosts 설정 완료!"
-grep -E 'k8s-master|k8s-worker1|k8s-worker2' /etc/hosts || true
+grep -E "${MASTER_HOSTNAME}|${WORKER1_HOSTNAME}|${WORKER2_HOSTNAME}" /etc/hosts || true
 
 # --- 3/10. 패키지 업데이트 및 필수 도구 설치(서버 기준) ---
 echo -e "\n${YELLOW}[3/10] 시스템 업데이트 및 필수 패키지 설치...${NC}"
@@ -169,7 +165,6 @@ mkdir -p /etc/containerd
 containerd config default > /etc/containerd/config.toml
 
 # SystemdCgroup = true (K8s 권장)
-# toml 라인 형식이 달라도 최대한 안전하게 치환
 sed -i -E 's/^(\s*SystemdCgroup\s*=\s*)false/\1true/' /etc/containerd/config.toml
 
 systemctl restart containerd
@@ -213,9 +208,9 @@ echo -e "${GREEN}==================================================${NC}"
 
 echo -e "\n📋 설정된 클러스터 정보:"
 echo -e "   - 현재 노드: ${GREEN}${MY_HOSTNAME}${NC} (IP: ${CURRENT_IP})"
-echo -e "   - Master : ${MASTER_IP}"
-echo -e "   - Worker1: ${WORKER1_IP}"
-echo -e "   - Worker2: ${WORKER2_IP}"
+echo -e "   - Master : ${MASTER_IP} (${MASTER_HOSTNAME})"
+echo -e "   - Worker1: ${WORKER1_IP} (${WORKER1_HOSTNAME})"
+echo -e "   - Worker2: ${WORKER2_IP} (${WORKER2_HOSTNAME})"
 
 echo -e "\n🔍 상태 점검:"
 echo -e "   - Swap: ${GREEN}${SWAP_STATE}${NC}"
