@@ -122,6 +122,22 @@ read -rp "Q3)   Argo CD UI NodePort 노출할까요? (y/N): "  DO_NODEPORT; DO_N
 read -rp "Q4)   배포 namespace [기본 boutique]: " TARGET_NS
 TARGET_NS="${TARGET_NS:-boutique}"
 
+# ==============================================================================
+# [장애 ② 수정] TARGET_NS를 .env 파일에 저장
+# setup_gitops_repo.sh가 동일한 namespace를 참조할 수 있도록
+# source한 ENV_FILE에 TARGET_NS를 추가/업데이트
+# ==============================================================================
+if grep -q "^TARGET_NS=" "$ENV_FILE" 2>/dev/null; then
+  # 이미 존재하면 값 업데이트
+  sed -i "s|^TARGET_NS=.*|TARGET_NS=\"${TARGET_NS}\"|" "$ENV_FILE"
+else
+  # 없으면 추가
+  echo "" >> "$ENV_FILE"
+  echo "# 배포 대상 namespace (setup_gitops_repo.sh와 공유)" >> "$ENV_FILE"
+  echo "TARGET_NS=\"${TARGET_NS}\"" >> "$ENV_FILE"
+fi
+say "✅ TARGET_NS=${TARGET_NS} → ${ENV_FILE} 저장 완료"
+
 read -rp "Q5)   Argo Application 생성할까요? (y/N): " DO_APP
 DO_APP="${DO_APP:-N}"
 
