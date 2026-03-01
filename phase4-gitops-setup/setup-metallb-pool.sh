@@ -15,20 +15,18 @@ say "🔎 MetalLB 파드 기동 상태 확인 중..."
 
 METALLB_VERSION="v0.14.3"
 
-# controller / speaker / webhook-server 3종 모두 체크
-if kubectl -n metallb-system rollout status deploy/controller     --timeout=120s >/dev/null 2>&1 && \
-   kubectl -n metallb-system rollout status ds/speaker            --timeout=120s >/dev/null 2>&1 && \
-   kubectl -n metallb-system rollout status deploy/webhook-server --timeout=120s >/dev/null 2>&1; then
-  say "✅ MetalLB 정상 동작 확인 완료 (controller + speaker + webhook-server)"
+# ※ MetalLB v0.14.x부터 webhook-server는 controller Pod에 내장(Embedded)됨
+#   → controller + speaker 2종만 체크 (webhook-server Deployment 체크 제거)
+if kubectl -n metallb-system rollout status deploy/controller --timeout=120s >/dev/null 2>&1 && \
+   kubectl -n metallb-system rollout status ds/speaker        --timeout=120s >/dev/null 2>&1; then
+  say "✅ MetalLB 정상 동작 확인 완료 (controller + speaker)"
 else
   warn "⚠️ MetalLB 컴포넌트가 준비되지 않았습니다. 매니페스트를 재배포합니다."
   kubectl apply -f "https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml" >/dev/null
   say "⏳ MetalLB controller rollout 대기(최대 3분)..."
-  kubectl -n metallb-system rollout status deploy/controller     --timeout=180s
+  kubectl -n metallb-system rollout status deploy/controller --timeout=180s
   say "⏳ MetalLB speaker rollout 대기(최대 3분)..."
-  kubectl -n metallb-system rollout status ds/speaker            --timeout=180s
-  say "⏳ MetalLB webhook-server rollout 대기(최대 3분)..."
-  kubectl -n metallb-system rollout status deploy/webhook-server --timeout=180s
+  kubectl -n metallb-system rollout status ds/speaker        --timeout=180s
   say "⏳ MetalLB webhook 소켓 준비 대기(10초)..."
   sleep 10
   say "✅ MetalLB 재배포 및 기동 완료 (${METALLB_VERSION})"
@@ -41,7 +39,7 @@ warn " 🚀 MetalLB IP Pool 선정 (학원망 보호)"
 warn "--------------------------------------------------"
 
 while true; do
-  read -rp "▶ 사용할 IP 대역을 입력하세요 (예: 192.168.10.200-192.168.10.220): " IP_RANGE
+  read -rp "▶ 사용할 IP 대역을 입력하세요 (예: 192.168.123.200-192.168.123.220): " IP_RANGE
 
   # 입력 형식 검증
   if [[ ! "$IP_RANGE" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+-[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -153,7 +151,6 @@ warn "--------------------------------------------------"
 warn " 🌐 최종 라우팅 테스트 (curl)"
 warn "--------------------------------------------------"
 echo "명령어: curl -sS -H \"Host: boutique.local\" http://${VIP}/"
-# 실제 앱이 없으므로 404가 뜨는 것이 정상 동작임을 안내
 echo "※ 아직 애플리케이션(파드)이 배포되지 않았으므로 '404 Not Found'가 뜨는 것이 완벽히 정상입니다."
 echo
 
