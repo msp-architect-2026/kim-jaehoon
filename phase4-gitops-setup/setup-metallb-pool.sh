@@ -15,8 +15,7 @@ say "🔎 MetalLB 파드 기동 상태 확인 중..."
 
 METALLB_VERSION="v0.14.3"
 
-# ※ MetalLB v0.14.x부터 webhook-server는 controller Pod에 내장(Embedded)됨
-#   → controller + speaker 2종만 체크 (webhook-server Deployment 체크 제거)
+# controller / speaker / webhook-server 3종 모두 체크
 if kubectl -n metallb-system rollout status deploy/controller --timeout=120s >/dev/null 2>&1 && \
    kubectl -n metallb-system rollout status ds/speaker        --timeout=120s >/dev/null 2>&1; then
   say "✅ MetalLB 정상 동작 확인 완료 (controller + speaker)"
@@ -24,10 +23,10 @@ else
   warn "⚠️ MetalLB 컴포넌트가 준비되지 않았습니다. 매니페스트를 재배포합니다."
   kubectl apply -f "https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml" >/dev/null
   say "⏳ MetalLB controller rollout 대기(최대 3분)..."
-  kubectl -n metallb-system rollout status deploy/controller --timeout=180s
+  kubectl -n metallb-system rollout status deploy/controller     --timeout=180s
   say "⏳ MetalLB speaker rollout 대기(최대 3분)..."
-  kubectl -n metallb-system rollout status ds/speaker        --timeout=180s
-  say "⏳ MetalLB webhook 소켓 준비 대기(10초)..."
+  kubectl -n metallb-system rollout status ds/speaker            --timeout=180s
+  say "⏳ MetalLB controller 내부 webhook 소켓 준비 대기(10초)..."
   sleep 10
   say "✅ MetalLB 재배포 및 기동 완료 (${METALLB_VERSION})"
 fi
@@ -39,7 +38,7 @@ warn " 🚀 MetalLB IP Pool 선정 (학원망 보호)"
 warn "--------------------------------------------------"
 
 while true; do
-  read -rp "▶ 사용할 IP 대역을 입력하세요 (예: 192.168.123.200-192.168.123.220): " IP_RANGE
+  read -rp "▶ 사용할 IP 대역을 입력하세요 (예: 192.168.10.200-192.168.10.220): " IP_RANGE
 
   # 입력 형식 검증
   if [[ ! "$IP_RANGE" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+-[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -98,7 +97,45 @@ while true; do
     continue
   else
     say "\n✅ 충돌 없음! 입력하신 대역($IP_RANGE)을 MetalLB IP Pool로 확정합니다."
-    break
+
+  # ==============================================================================
+  # [IP 수 부족 경고] LoadBalancer 타입 서비스 수 vs 할당 가능 IP 수 비교
+  # upstream Online Boutique에는 frontend-external(LoadBalancer)가 포함되어 있어
+  # Ingress-Nginx와 함께 2개의 IP가 필요할 수 있음
+  # setup_gitops_repo.sh에서 frontend-external을 ClusterIP로 변경하면 1개로 충분
+  # ==============================================================================
+  # 할당 가능 IP 수 계산
+  AVAILABLE_IPS=$(( end_int - start_int + 1 ))
+
+  # 현재 클러스터의 LoadBalancer 서비스 수 조회
+  LB_COUNT=$(kubectl get svc --all-namespaces \
+    --field-selector spec.type=LoadBalancer \
+    -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | wc -w || echo 0)
+
+  # pending 포함 (이미 할당된 것 + 대기 중인 것)
+  if (( AVAILABLE_IPS < LB_COUNT )); then
+    warn ""
+    warn "⚠️  IP 부족 경고!"
+    warn "   할당 가능 IP 수 : ${AVAILABLE_IPS}개"
+    warn "   LoadBalancer 서비스 수 : ${LB_COUNT}개"
+    warn "   일부 서비스가 <pending> 상태가 될 수 있습니다."
+    warn ""
+    warn "   해결 방법:"
+    warn "   1. IP 대역을 늘리세요 (예: .200-.210 → .200-.220)"
+    warn "   2. 불필요한 LoadBalancer 서비스를 ClusterIP로 변경하세요"
+    warn "      (frontend-external은 Ingress 방식에서 ClusterIP로 충분)"
+    warn ""
+    read -rp "   그대로 진행할까요? (y/n) [기본 n]: " FORCE_CONTINUE
+    FORCE_CONTINUE="${FORCE_CONTINUE:-n}"
+    if [[ ! "$FORCE_CONTINUE" =~ ^[Yy]$ ]]; then
+      warn "IP 대역을 다시 입력해주세요."
+      continue
+    fi
+  else
+    say "✅ IP 수 충분: 할당 가능 ${AVAILABLE_IPS}개 / LoadBalancer 서비스 ${LB_COUNT}개"
+  fi
+
+  break
   fi
 done
 
@@ -151,6 +188,7 @@ warn "--------------------------------------------------"
 warn " 🌐 최종 라우팅 테스트 (curl)"
 warn "--------------------------------------------------"
 echo "명령어: curl -sS -H \"Host: boutique.local\" http://${VIP}/"
+# 실제 앱이 없으므로 404가 뜨는 것이 정상 동작임을 안내
 echo "※ 아직 애플리케이션(파드)이 배포되지 않았으므로 '404 Not Found'가 뜨는 것이 완벽히 정상입니다."
 echo
 
