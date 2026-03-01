@@ -210,6 +210,24 @@ patches:
     target:
       kind: Deployment
 
+  # ---------------------------------------------------------------------------
+  # [MetalLB IP 충돌 수정] frontend-external Service 타입 변경
+  # upstream 원본: Type=LoadBalancer → MetalLB IP 추가 소모 발생
+  # 설계 의도: 외부 진입점은 Ingress-Nginx 단일 VIP로 통일
+  #   외부 → MetalLB VIP → Ingress-Nginx → frontend(ClusterIP) → Pod
+  # ClusterIP로 변경하여 VIP를 Ingress-Nginx 전용으로 확보
+  # ---------------------------------------------------------------------------
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: frontend-external
+      spec:
+        type: ClusterIP
+    target:
+      kind: Service
+      name: frontend-external
+
 # ---------------------------------------------------------------------------
 # 이미지 교체 테이블
 # name    : upstream 원본 이미지 이름 (CI의 UPSTREAM_PREFIX와 반드시 일치)
