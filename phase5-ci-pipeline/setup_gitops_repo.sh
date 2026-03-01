@@ -52,6 +52,13 @@ GITOPS_PROJECT="${GITOPS_PROJECT:-gitops-repo}"
 GITOPS_REPO_URL="${GITLAB_URL}/${GROUP}/${GITOPS_PROJECT}.git"
 REGISTRY_HOSTPORT="${REGISTRY_HOSTPORT:?REGISTRY_HOSTPORT가 env에 없습니다}"
 
+# ==============================================================================
+# [장애 ② 수정] TARGET_NS — 20-k8s-bootstrap-phase3.sh가 저장한 값 사용
+# .env에 없을 경우 기본값 boutique 사용 (하위 호환)
+# ==============================================================================
+TARGET_NS="${TARGET_NS:-boutique}"
+say "✅ 배포 대상 namespace: ${TARGET_NS}"
+
 # loadgenerator 제외 10개
 BOUTIQUE_SERVICES="adservice cartservice checkoutservice currencyservice emailservice frontend paymentservice productcatalogservice recommendationservice shippingservice"
 
@@ -177,10 +184,31 @@ cat > apps/boutique/overlays/dev/kustomization.yaml <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: demo
+# [장애 ② 수정] namespace: demo 하드코딩 제거
+# 20-k8s-bootstrap-phase3.sh Q4에서 입력한 TARGET_NS 값으로 동적 주입
+namespace: ${TARGET_NS}
 
 resources:
   - ../../base
+
+# ---------------------------------------------------------------------------
+# [장애 ③ 수정] imagePullSecrets 전체 Deployment에 주입
+# 20-k8s-bootstrap-phase3.sh가 생성한 gitlab-regcred secret을 참조
+# 프라이빗 레지스트리(GitLab)에서 이미지를 pull하기 위한 인증 정보
+# ---------------------------------------------------------------------------
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: not-used
+      spec:
+        template:
+          spec:
+            imagePullSecrets:
+              - name: gitlab-regcred
+    target:
+      kind: Deployment
 
 # ---------------------------------------------------------------------------
 # 이미지 교체 테이블
