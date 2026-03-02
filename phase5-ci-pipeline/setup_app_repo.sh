@@ -2,7 +2,7 @@
 # ==============================================================================
 # 30-setup-app-repo.sh
 # 역할: Google Online Boutique 소스를 clone → app-repo(GitLab)에 push
-# 실행 위치: Master Node (192.168.10.113)
+# 실행 위취 ex: Master Node (192.168.10.113)
 # 전제 조건:
 #   - .env.gitops-lab 파일이 동일 디렉터리에 존재 (10-k8s-bootstrap-phase3.sh 생성)
 #   - install-ca-all.sh 실행 완료 (OS CA 신뢰 등록됨)
@@ -99,7 +99,15 @@ fi
 # ---------- 고정 상수 ----------
 APP_PROJECT="${APP_PROJECT:-app-repo}"
 APP_REPO_URL="${GITLAB_URL}/${GROUP}/${APP_PROJECT}.git"
-BOUTIQUE_UPSTREAM="https://github.com/GoogleCloudPlatform/microservices-demo.git"
+
+# ==============================================================================
+# [변경] 소스코드 출처: 구글 upstream → 내 GitHub 레포
+# 내 GitHub의 phase4-gitops-setup/app-source/src/ 만 가져옴
+# loadgenerator, shoppingassistantservice 는 CI 빌드 대상 제외
+# ==============================================================================
+BOUTIQUE_UPSTREAM="https://github.com/msp-architect-2026/kim-jaehoon.git"
+BOUTIQUE_BRANCH="devops-lab-infra"
+BOUTIQUE_SRC_PATH="phase4-gitops-setup/app-source/src"
 
 # loadgenerator 제외 10개
 BOUTIQUE_SERVICES="adservice cartservice checkoutservice currencyservice emailservice frontend paymentservice productcatalogservice recommendationservice shippingservice"
@@ -143,22 +151,39 @@ rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-# ---------- 1. Online Boutique upstream clone ----------
-say "\n[1/4] Google Online Boutique upstream clone 중..."
-say "     (소스 크기 ~100MB, 네트워크에 따라 수분 소요)"
+# ---------- 1. 내 GitHub에서 src/ sparse checkout ----------
+say "\n[1/4] 내 GitHub에서 src/ 가져오는 중..."
+say "     (sparse checkout — src/ 만 다운로드)"
 
-git clone --depth=1 "$BOUTIQUE_UPSTREAM" "${WORK_DIR}/boutique"
-say "✅ upstream clone 완료"
+git clone \
+  --depth=1 \
+  --filter=blob:none \
+  --sparse \
+  --branch "$BOUTIQUE_BRANCH" \
+  "$BOUTIQUE_UPSTREAM" \
+  "${WORK_DIR}/boutique"
+
+cd "${WORK_DIR}/boutique"
+git sparse-checkout set "$BOUTIQUE_SRC_PATH"
+say "✅ sparse checkout 완료: ${BOUTIQUE_SRC_PATH}"
 
 # ---------- 2. 불필요 파일 제거 + git 초기화 ----------
-say "\n[2/4] loadgenerator 제거 및 git 초기화..."
-cd "${WORK_DIR}/boutique"
+say "\n[2/4] loadgenerator/shoppingassistantservice 제거 및 git 초기화..."
 
-rm -rf src/loadgenerator
-say "  ✅ src/loadgenerator 제거"
+# src/ 를 루트로 재구성
+# (GitLab app-repo는 src/ 를 루트로 기대함)
+cp -r "${BOUTIQUE_SRC_PATH}" /tmp/boutique-src-$$
+cd "$WORK_DIR"
+rm -rf boutique
+mkdir boutique
+cp -r /tmp/boutique-src-$$/* boutique/
+rm -rf /tmp/boutique-src-$$
+cd boutique
 
-# upstream 히스토리 제거 후 새 저장소로 초기화
-rm -rf .git
+rm -rf loadgenerator shoppingassistantservice 2>/dev/null || true
+say "  ✅ loadgenerator / shoppingassistantservice 제거"
+
+# 새 저장소로 초기화
 git init -b main
 git config user.name "gitlab-ci-setup"
 git config user.email "setup@local"
@@ -167,7 +192,7 @@ git config user.email "setup@local"
 say "\n[3/4] 10개 서비스 소스 구조 검증..."
 ALL_OK=true
 for svc in $BOUTIQUE_SERVICES; do
-  SVC_DIR="src/${svc}"
+  SVC_DIR="${svc}"
   if [[ ! -d "$SVC_DIR" ]]; then
     err "  ❌ 서비스 디렉터리 없음: ${SVC_DIR}"
     ALL_OK=false
@@ -203,7 +228,7 @@ AUTH_URL="$(echo "$APP_REPO_URL" | \
   sed "s#https://#https://root:${GITLAB_ADMIN_TOKEN}@#")"
 
 git add -A
-git commit -m "feat: initial Online Boutique source (loadgenerator excluded)"
+git commit -m "feat: initial Online Boutique source from my GitHub (loadgenerator excluded)"
 
 git remote add origin "$AUTH_URL"
 # force push: app-repo에 이미 .gitlab-ci.yml 커밋이 존재하므로 덮어씀
