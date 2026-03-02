@@ -2,17 +2,22 @@
 # ==============================================================================
 # 31-setup-gitops-repo.sh
 # 역할: gitops-repo에 Kustomize base/overlays 구조 생성 + Argo CD가 바라볼 구조 완성
-# 실행 위치: Mini PC (192.168.10.47)
+# 실행 위치: Master Node (k8s-master)
 # 전제 조건: .env.gitops-lab 파일 존재, 30-setup-app-repo.sh 완료
 #
 # 생성되는 구조:
 #   apps/boutique/
 #     base/
-#       kustomization.yaml   ← 원본 이미지 정의 (upstream 주소 기준)
-#       [각 서비스 deployment/service yaml]
+#       adservice.yaml / cartservice.yaml ... (서비스별 직접 작성)
+#       kustomization.yaml         ← 로컬 파일 참조 + loadgenerator 제외
 #     overlays/
 #       dev/
-#         kustomization.yaml ← CI가 태그를 업데이트하는 파일
+#         kustomization.yaml       ← CI가 태그를 업데이트하는 파일
+#
+# 변경 이력:
+#   - upstream URL 참조 방식 → 내 GitHub 레포 URL 참조 방식으로 전환
+#     이유: 포트폴리오 증빙 (yaml 파일이 내 GitHub에 직접 존재)
+#           yaml 수정 이력이 내 GitHub commit log에 남음
 # ==============================================================================
 set -euo pipefail
 
@@ -89,6 +94,8 @@ OK="${OK:-n}"
 export GIT_SSL_CAINFO="$GITLAB_CA_CERT"
 git config --global http.sslCAInfo "$GITLAB_CA_CERT"
 
+
+
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -121,45 +128,48 @@ say "\n[2/4] Kustomize base 구성 중..."
 mkdir -p apps/boutique/base
 mkdir -p apps/boutique/overlays/dev
 
-# ── base/kustomization.yaml ──
+# ==============================================================================
+# base/kustomization.yaml
+# 역할: 내 GitHub 레포에 직접 관리하는 서비스별 yaml 파일 참조
+#
+# 소스: github.com/msp-architect-2026/kim-jaehoon (devops-lab-infra 브랜치)
+# 경로: phase4-gitops-setup/gitops/base/
+#
+# yaml 수정 방법:
+#   → 내 GitHub의 phase4-gitops-setup/gitops/base/*.yaml 직접 수정
+#   → commit & push → Argo CD sync 시 자동 반영
+# ==============================================================================
+
+GITHUB_BASE_URL="https://raw.githubusercontent.com/msp-architect-2026/kim-jaehoon/devops-lab-infra/phase4-gitops-setup/gitops/base"
+
 cat > apps/boutique/base/kustomization.yaml <<EOF
 # ==============================================================================
 # base/kustomization.yaml
-# 역할: Online Boutique 원본 매니페스트를 upstream에서 참조
-#       이미지 이름은 여기서 정의 (원본 → 우리 레지스트리로 교체 기반)
-# ⚠️  이 파일을 직접 수정하지 마세요.
-#     태그 업데이트는 overlays/dev/kustomization.yaml에서만 합니다.
+# 역할: 내 GitHub 레포의 서비스별 yaml 파일을 원격 참조
+#
+# 출처: github.com/msp-architect-2026/kim-jaehoon (devops-lab-infra)
+# 경로: phase4-gitops-setup/gitops/base/
+#
+# ⚠️  yaml 수정은 내 GitHub 레포에서 직접 합니다.
+#     스크립트 재실행 불필요 — GitHub 수정 후 Argo CD가 자동 반영합니다.
 # ==============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# upstream 공식 매니페스트를 직접 참조
 resources:
-  - https://raw.githubusercontent.com/GoogleCloudPlatform/microservices-demo/main/release/kubernetes-manifests.yaml
-
-# loadgenerator는 배포에서 제외
-patches:
-  - patch: |-
-      \$patch: delete
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: loadgenerator
-    target:
-      kind: Deployment
-      name: loadgenerator
-  - patch: |-
-      \$patch: delete
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: loadgenerator
-    target:
-      kind: Service
-      name: loadgenerator
+  - ${GITHUB_BASE_URL}/adservice.yaml
+  - ${GITHUB_BASE_URL}/cartservice.yaml
+  - ${GITHUB_BASE_URL}/checkoutservice.yaml
+  - ${GITHUB_BASE_URL}/currencyservice.yaml
+  - ${GITHUB_BASE_URL}/emailservice.yaml
+  - ${GITHUB_BASE_URL}/frontend.yaml
+  - ${GITHUB_BASE_URL}/paymentservice.yaml
+  - ${GITHUB_BASE_URL}/productcatalogservice.yaml
+  - ${GITHUB_BASE_URL}/recommendationservice.yaml
+  - ${GITHUB_BASE_URL}/shippingservice.yaml
 EOF
 
-say "  ✅ base/kustomization.yaml 생성"
+say "  ✅ base/kustomization.yaml 생성 (내 GitHub URL 참조)"
 
 # ── overlays/dev/kustomization.yaml ──
 say "\n[3/4] Kustomize overlay(dev) 구성 중..."
@@ -240,7 +250,8 @@ EOF
 
 say "  ✅ overlays/dev/kustomization.yaml 생성 (10개 서비스)"
 
-# ---------- README ----------
+# ---------- README + .gitignore ----------
+say "\n[4/4] gitops-repo push 중..."
 cat > README.md <<'EOF'
 # GitOps Repository — Online Boutique
 
@@ -248,11 +259,29 @@ cat > README.md <<'EOF'
 
 ```
 apps/boutique/
-  base/                        # upstream 원본 매니페스트 참조
-    kustomization.yaml
+  base/
+    adservice.yaml / cartservice.yaml ...  ← 서비스별 직접 작성 (11개)
+    kustomization.yaml         ← 로컬 파일 참조 + loadgenerator 제외
   overlays/
-    dev/                       # Argo CD가 바라보는 경로
-      kustomization.yaml       # ← CI가 이미지 태그를 자동 업데이트
+    dev/                       ← Argo CD가 바라보는 경로
+      kustomization.yaml       ← CI가 이미지 태그를 자동 업데이트
+```
+
+## 설계 원칙
+
+- `base/*.yaml` : 서비스별 독립 파일 (직접 수정 금지, 재실행으로 재생성)
+- `overlays/dev/kustomization.yaml` : 환경별 커스터마이징만 선언
+  - namespace 주입
+  - imagePullSecrets 주입 (gitlab-regcred)
+  - frontend-external → ClusterIP 변환
+  - 이미지 교체 (우리 Registry + CI SHA 태그)
+
+## 버전 업그레이드 방법
+
+```bash
+# 새 버전으로 재실행
+./31-setup-gitops-repo.sh .env.gitops-lab
+# 버전 입력 시 새 태그 입력 (예: v0.11.0)
 ```
 
 ## 이미지 태그 업데이트 흐름
@@ -279,7 +308,7 @@ cat > .gitignore <<'EOF'
 EOF
 
 # ---------- push ----------
-say "\n[4/4] gitops-repo push 중..."
+say "\n✅ gitops-repo push 준비 완료. push 중..."
 git add -A
 git status
 
@@ -287,12 +316,12 @@ git status
 if git diff --cached --quiet; then
   warn "  변경 없음 → push 스킵 (이미 최신 상태)"
 else
-  git commit -m "feat: init Kustomize base/overlays structure for Online Boutique
+  git commit -m "feat: Kustomize structure with GitHub-hosted yaml references
 
-- base: upstream kubernetes-manifests.yaml 참조
-- overlays/dev: 10개 서비스 이미지 교체 테이블 초기화
-- loadgenerator 제외 (Deployment/Service 패치로 삭제)
-- CI 파이프라인이 images[].newTag 자동 갱신
+- base: 내 GitHub 레포 yaml 파일을 raw URL로 참조
+  (github.com/msp-architect-2026/kim-jaehoon/devops-lab-infra)
+- overlays/dev: namespace, imagePullSecrets, frontend-external 설정
+- yaml 수정은 GitHub에서 직접 → commit → Argo CD 자동 반영
 
 Setup: 31-setup-gitops-repo.sh"
 
@@ -305,9 +334,10 @@ echo ""
 echo "=================================================="
 echo " 🎉 Step 2 완료: gitops-repo Kustomize 구조 생성"
 echo "=================================================="
-echo "  GitLab URL  : ${GITLAB_URL}/${GROUP}/${GITOPS_PROJECT}"
-echo "  Argo CD path: apps/boutique/overlays/dev"
-echo "  서비스 수   : 10개 (loadgenerator 제외)"
+echo "  GitLab URL    : ${GITLAB_URL}/${GROUP}/${GITOPS_PROJECT}"
+echo "  Argo CD path  : apps/boutique/overlays/dev"
+echo "  base 구조   : 내 GitHub raw URL 참조 (10개 서비스)"
+echo "  서비스 수      : 10개 (loadgenerator 제외)"
 echo ""
 echo "  → 다음 단계: ./32-setup-gitlab-ci.sh 실행"
 echo "              .gitlab-ci.yml 완성본을 app-repo에 push"
