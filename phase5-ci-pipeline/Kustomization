@@ -1,0 +1,80 @@
+# ==============================================================================
+# overlays/dev/kustomization.yaml
+# 역할: dev 환경 배포 설정
+#       CI 파이프라인이 images[].newTag 를 CI_COMMIT_SHORT_SHA 로 자동 업데이트
+#
+# ⚠️  images[].newTag 는 CI가 자동으로 관리합니다. 수동으로 수정하지 마세요.
+# ==============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: boutique
+resources:
+  - ../../base
+# ---------------------------------------------------------------------------
+# imagePullSecrets 전체 Deployment에 주입
+# ---------------------------------------------------------------------------
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: not-used
+      spec:
+        template:
+          spec:
+            imagePullSecrets:
+              - name: gitlab-regcred
+    target:
+      kind: Deployment
+  # ---------------------------------------------------------------------------
+  # frontend-external Service 타입 변경
+  # LoadBalancer → ClusterIP (MetalLB IP 충돌 방지, Ingress-Nginx로 통일)
+  # ---------------------------------------------------------------------------
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: frontend-external
+      spec:
+        type: ClusterIP
+    target:
+      kind: Service
+      name: frontend-external
+# ---------------------------------------------------------------------------
+# 이미지 교체 테이블
+# [수정] name: base YAML의 실제 image 필드값(짧은 이름)으로 변경
+#        us-central1-docker.pkg.dev/... → 짧은 이름 (adservice, frontend 등)
+# newName : 우리 GitLab Registry 경로 (유지)
+# newTag  : CI_COMMIT_SHORT_SHA (CI 파이프라인이 자동 갱신)
+# ---------------------------------------------------------------------------
+images:
+  - name: adservice
+    newName: 192.168.10.47:5050/root/app-repo/adservice
+    newTag: latest
+  - name: cartservice
+    newName: 192.168.10.47:5050/root/app-repo/cartservice
+    newTag: latest
+  - name: checkoutservice
+    newName: 192.168.10.47:5050/root/app-repo/checkoutservice
+    newTag: latest
+  - name: currencyservice
+    newName: 192.168.10.47:5050/root/app-repo/currencyservice
+    newTag: latest
+  - name: emailservice
+    newName: 192.168.10.47:5050/root/app-repo/emailservice
+    newTag: latest
+  - name: frontend
+    newName: 192.168.10.47:5050/root/app-repo/frontend
+    newTag: latest
+  - name: paymentservice
+    newName: 192.168.10.47:5050/root/app-repo/paymentservice
+    newTag: latest
+  - name: productcatalogservice
+    newName: 192.168.10.47:5050/root/app-repo/productcatalogservice
+    newTag: latest
+  - name: recommendationservice
+    newName: 192.168.10.47:5050/root/app-repo/recommendationservice
+    newTag: latest
+  - name: shippingservice
+    newName: 192.168.10.47:5050/root/app-repo/shippingservice
+    newTag: latest

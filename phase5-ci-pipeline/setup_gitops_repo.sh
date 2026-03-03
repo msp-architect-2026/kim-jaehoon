@@ -1,23 +1,34 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# 31-setup-gitops-repo.sh
+# 31-setup-gitops-repo.sh  (v2 — 로컬 파일 방식)
+#
 # 역할: gitops-repo에 Kustomize base/overlays 구조 생성 + Argo CD가 바라볼 구조 완성
 # 실행 위치: Master Node (k8s-master)
 # 전제 조건: .env.gitops-lab 파일 존재, 30-setup-app-repo.sh 완료
 #
+# ──────────────────────────────────────────────────────────────────────────────
+# [v1 → v2 핵심 변경]
+#   v1: base/kustomization.yaml 이 내 GitHub raw URL 을 원격 참조
+#       → 문제: Argo CD가 GitHub 파일을 직접 추적 못 함
+#              GitHub 수정 → GitLab → 클러스터 반영 경로가 불명확
+#              리소스 requests/limits 수정 후 Sync 해도 반영 안 되는 현상 발생
+#
+#   v2: Google Online Boutique 공식 레포에서 kubernetes-manifests/*.yaml 을 직접 clone
+#       → 수정된 파일을 gitops-repo/apps/boutique/base/ 에 로컬로 저장
+#       → base/kustomization.yaml 이 ./adservice.yaml 등 로컬 파일만 참조
+#       → GitHub 참조 완전 제거 (단순화)
+#       → 이후 리소스 수정: base/*.yaml 파일 직접 편집 → commit → push → Argo CD Sync
+#
 # 생성되는 구조:
 #   apps/boutique/
 #     base/
-#       adservice.yaml / cartservice.yaml ... (서비스별 직접 작성)
-#       kustomization.yaml         ← 로컬 파일 참조 + loadgenerator 제외
+#       adservice.yaml
+#       cartservice.yaml
+#       ... (10개 서비스, loadgenerator 제외)
+#       kustomization.yaml  ← 로컬 파일만 참조
 #     overlays/
 #       dev/
-#         kustomization.yaml       ← CI가 태그를 업데이트하는 파일
-#
-# 변경 이력:
-#   - upstream URL 참조 방식 → 내 GitHub 레포 URL 참조 방식으로 전환
-#     이유: 포트폴리오 증빙 (yaml 파일이 내 GitHub에 직접 존재)
-#           yaml 수정 이력이 내 GitHub commit log에 남음
+#         kustomization.yaml  ← CI가 이미지 태그를 업데이트하는 파일
 # ==============================================================================
 set -euo pipefail
 
@@ -39,7 +50,6 @@ source "$ENV_FILE"
 # [안전망] GITLAB_CA_CERT 상대 경로 → 절대 경로 변환
 # 이 스크립트는 내부에서 cd "$WORK_DIR" 으로 디렉터리를 이동하므로
 # 상대 경로가 .env에 남아있으면 git push 시 SSL CA 오류 발생
-# → source 직후 .env 파일 위치 기준으로 절대 경로 변환하여 방어
 # ==============================================================================
 if [[ -n "${GITLAB_CA_CERT:-}" && "${GITLAB_CA_CERT}" != /* ]]; then
   _env_dir="$(cd "$(dirname "$(realpath "$ENV_FILE")")" && pwd)"
@@ -57,10 +67,6 @@ GITOPS_PROJECT="${GITOPS_PROJECT:-gitops-repo}"
 GITOPS_REPO_URL="${GITLAB_URL}/${GROUP}/${GITOPS_PROJECT}.git"
 REGISTRY_HOSTPORT="${REGISTRY_HOSTPORT:?REGISTRY_HOSTPORT가 env에 없습니다}"
 
-# ==============================================================================
-# [장애 ② 수정] TARGET_NS — 20-k8s-bootstrap-phase3.sh가 저장한 값 사용
-# .env에 없을 경우 기본값 boutique 사용 (하위 호환)
-# ==============================================================================
 TARGET_NS="${TARGET_NS:-boutique}"
 say "✅ 배포 대상 namespace: ${TARGET_NS}"
 
@@ -70,20 +76,29 @@ BOUTIQUE_SERVICES="adservice cartservice checkoutservice currencyservice emailse
 # 구글 원본 레지스트리 prefix (kustomize images.name 에서 사용되는 원본 이름)
 UPSTREAM_REGISTRY="us-central1-docker.pkg.dev/google-samples/microservices-demo"
 
-# CI가 push할 우리 레지스트리 prefix
-# CI_REGISTRY_IMAGE = REGISTRY_HOSTPORT/GROUP/APP_PROJECT
 APP_PROJECT="${APP_PROJECT:-app-repo}"
 OUR_REGISTRY="${REGISTRY_HOSTPORT}/${GROUP}/${APP_PROJECT}"
+
+# ==============================================================================
+# [v2 신규] Google Online Boutique 공식 kubernetes-manifests 출처
+# ==============================================================================
+BOUTIQUE_K8S_REPO="https://github.com/GoogleCloudPlatform/microservices-demo.git"
+BOUTIQUE_K8S_BRANCH="main"
+BOUTIQUE_K8S_MANIFESTS_PATH="kubernetes-manifests"
 
 WORK_DIR="/tmp/gitops-setup-$$"
 
 echo "=================================================="
-echo " Step 2. gitops-repo Kustomize 구조 생성"
+echo " Step 2. gitops-repo Kustomize 구조 생성 (v2 로컬 파일 방식)"
 echo "=================================================="
 warn "  GitLab URL    : ${GITLAB_URL}"
 warn "  gitops-repo   : ${GROUP}/${GITOPS_PROJECT}"
 warn "  Registry      : ${OUR_REGISTRY}"
 warn "  CA 인증서     : ${GITLAB_CA_CERT}"
+warn "  매니페스트 출처: ${BOUTIQUE_K8S_REPO} (kubernetes-manifests/)"
+echo ""
+warn "  [v2 변경] GitHub raw URL 참조 제거 → 로컬 YAML 파일 직접 저장"
+warn "  이후 리소스 수정은 base/*.yaml 편집 후 commit+push → Argo CD Sync"
 echo ""
 read -rp "계속할까요? (y/n) [기본 n]: " OK
 OK="${OK:-n}"
@@ -94,18 +109,15 @@ OK="${OK:-n}"
 export GIT_SSL_CAINFO="$GITLAB_CA_CERT"
 git config --global http.sslCAInfo "$GITLAB_CA_CERT"
 
-
-
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 trap 'rm -rf "$WORK_DIR"' EXIT
 cd "$WORK_DIR"
 
-# ---------- gitops-repo clone (이미 내용 있을 수 있음 → 멱등) ----------
+# ---------- gitops-repo clone ----------
 AUTH_URL="$(echo "$GITOPS_REPO_URL" | sed "s#https://#https://${GITOPS_PUSH_USER}:${GITOPS_PUSH_TOKEN}@#")"
 
-say "\n[1/4] gitops-repo clone 중..."
-# 빈 repo여도 에러 없이 처리
+say "\n[1/5] gitops-repo clone 중..."
 git clone "$AUTH_URL" gitops 2>/dev/null || {
   warn "  clone 실패 → 빈 repo로 초기화"
   mkdir gitops
@@ -115,66 +127,117 @@ git clone "$AUTH_URL" gitops 2>/dev/null || {
   cd "$WORK_DIR"
 }
 cd gitops
-
-# git 설정
 git config user.name "gitlab-ci-setup"
 git config user.email "setup@local"
-
-# main 브랜치 보장
 git checkout main 2>/dev/null || git checkout -b main
 
+# ==============================================================================
+# [v2 신규] Google Online Boutique kubernetes-manifests clone
+# sparse checkout 으로 kubernetes-manifests/ 만 가져옴
+# ==============================================================================
+say "\n[2/5] Google Online Boutique kubernetes-manifests clone 중..."
+say "     출처: ${BOUTIQUE_K8S_REPO}"
+
+git clone \
+  --depth=1 \
+  --filter=blob:none \
+  --sparse \
+  --branch "$BOUTIQUE_K8S_BRANCH" \
+  "$BOUTIQUE_K8S_REPO" \
+  "${WORK_DIR}/boutique-k8s"
+
+cd "${WORK_DIR}/boutique-k8s"
+git sparse-checkout set "$BOUTIQUE_K8S_MANIFESTS_PATH"
+
+MANIFESTS_DIR="${WORK_DIR}/boutique-k8s/${BOUTIQUE_K8S_MANIFESTS_PATH}"
+say "✅ kubernetes-manifests 다운로드 완료: ${MANIFESTS_DIR}"
+
+# 디렉터리 확인
+ls -la "$MANIFESTS_DIR"
+
+cd "${WORK_DIR}/gitops"
+
 # ---------- base 디렉터리 구성 ----------
-say "\n[2/4] Kustomize base 구성 중..."
+say "\n[3/5] Kustomize base 구성 중 (로컬 YAML 파일 복사)..."
 mkdir -p apps/boutique/base
 mkdir -p apps/boutique/overlays/dev
 
 # ==============================================================================
-# base/kustomization.yaml
-# 역할: 내 GitHub 레포에 직접 관리하는 서비스별 yaml 파일 참조
+# [v2] 서비스별 YAML 파일을 base/ 에 로컬로 복사
 #
-# 소스: github.com/msp-architect-2026/kim-jaehoon (devops-lab-infra 브랜치)
-# 경로: phase4-gitops-setup/gitops/base/
+# Google 원본 kubernetes-manifests/ 구조:
+#   - adservice.yaml, cartservice.yaml ... (서비스별 Deployment + Service 포함)
+#   - loadgenerator.yaml (제외)
 #
-# yaml 수정 방법:
-#   → 내 GitHub의 phase4-gitops-setup/gitops/base/*.yaml 직접 수정
-#   → commit & push → Argo CD sync 시 자동 반영
+# 복사 후 base/kustomization.yaml 은 ./adservice.yaml 등 로컬 파일만 참조
+# → Argo CD가 gitops-repo 안의 파일을 직접 추적 가능
+# → 리소스 수정: base/adservice.yaml 편집 → commit → push → Sync
 # ==============================================================================
+COPIED_SERVICES=""
+MISSING_SERVICES=""
 
-GITHUB_BASE_URL="https://raw.githubusercontent.com/msp-architect-2026/kim-jaehoon/devops-lab-infra/phase4-gitops-setup/gitops/base"
+for svc in $BOUTIQUE_SERVICES; do
+  SRC_YAML="${MANIFESTS_DIR}/${svc}.yaml"
+  DST_YAML="apps/boutique/base/${svc}.yaml"
 
-cat > apps/boutique/base/kustomization.yaml <<EOF
+  if [[ -f "$SRC_YAML" ]]; then
+    cp "$SRC_YAML" "$DST_YAML"
+    say "  ✅ 복사: ${svc}.yaml"
+    COPIED_SERVICES="${COPIED_SERVICES} ${svc}"
+  else
+    warn "  ⚠️  파일 없음: ${SRC_YAML} → 건너뜀"
+    MISSING_SERVICES="${MISSING_SERVICES} ${svc}"
+  fi
+done
+
+if [[ -n "$MISSING_SERVICES" ]]; then
+  err "❌ 아래 서비스 YAML 파일을 찾지 못했습니다:${MISSING_SERVICES}"
+  err "   Google 레포 구조가 변경되었을 수 있습니다."
+  err "   ${MANIFESTS_DIR} 내 파일명을 확인하세요:"
+  ls "$MANIFESTS_DIR"
+  exit 1
+fi
+
+say "✅ 10개 서비스 YAML 복사 완료"
+
 # ==============================================================================
-# base/kustomization.yaml
-# 역할: 내 GitHub 레포의 서비스별 yaml 파일을 원격 참조
+# [v2] base/kustomization.yaml — 로컬 파일만 참조 (URL 제거)
 #
-# 출처: github.com/msp-architect-2026/kim-jaehoon (devops-lab-infra)
-# 경로: phase4-gitops-setup/gitops/base/
+# 이전(v1): resources 에 GitHub raw URL 기재
+# 이후(v2): resources 에 ./adservice.yaml 등 로컬 경로 기재
 #
-# ⚠️  yaml 수정은 내 GitHub 레포에서 직접 합니다.
-#     스크립트 재실행 불필요 — GitHub 수정 후 Argo CD가 자동 반영합니다.
+# 리소스(requests/limits) 수정 방법:
+#   1. gitops-repo를 로컬에 clone
+#   2. apps/boutique/base/{서비스명}.yaml 편집
+#   3. git commit && git push
+#   4. Argo CD UI 에서 Sync (또는 auto-sync 대기)
 # ==============================================================================
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
+RESOURCES_BLOCK=""
+for svc in $BOUTIQUE_SERVICES; do
+  RESOURCES_BLOCK="${RESOURCES_BLOCK}  - ./${svc}.yaml\n"
+done
 
-resources:
-  - ${GITHUB_BASE_URL}/adservice.yaml
-  - ${GITHUB_BASE_URL}/cartservice.yaml
-  - ${GITHUB_BASE_URL}/checkoutservice.yaml
-  - ${GITHUB_BASE_URL}/currencyservice.yaml
-  - ${GITHUB_BASE_URL}/emailservice.yaml
-  - ${GITHUB_BASE_URL}/frontend.yaml
-  - ${GITHUB_BASE_URL}/paymentservice.yaml
-  - ${GITHUB_BASE_URL}/productcatalogservice.yaml
-  - ${GITHUB_BASE_URL}/recommendationservice.yaml
-  - ${GITHUB_BASE_URL}/shippingservice.yaml
-EOF
+printf "# ==============================================================================\n" > apps/boutique/base/kustomization.yaml
+printf "# base/kustomization.yaml  (v2 — 로컬 파일 참조)\n" >> apps/boutique/base/kustomization.yaml
+printf "#\n" >> apps/boutique/base/kustomization.yaml
+printf "# 출처: Google Online Boutique kubernetes-manifests/ (직접 clone)\n" >> apps/boutique/base/kustomization.yaml
+printf "#\n" >> apps/boutique/base/kustomization.yaml
+printf "# 리소스(requests/limits) 수정 방법:\n" >> apps/boutique/base/kustomization.yaml
+printf "#   1. 이 레포 clone\n" >> apps/boutique/base/kustomization.yaml
+printf "#   2. apps/boutique/base/{서비스}.yaml 편집\n" >> apps/boutique/base/kustomization.yaml
+printf "#   3. git commit && git push\n" >> apps/boutique/base/kustomization.yaml
+printf "#   4. Argo CD Sync (또는 auto-sync 대기)\n" >> apps/boutique/base/kustomization.yaml
+printf "# ==============================================================================\n" >> apps/boutique/base/kustomization.yaml
+printf "apiVersion: kustomize.config.k8s.io/v1beta1\n" >> apps/boutique/base/kustomization.yaml
+printf "kind: Kustomization\n\n" >> apps/boutique/base/kustomization.yaml
+printf "resources:\n" >> apps/boutique/base/kustomization.yaml
+printf "${RESOURCES_BLOCK}" >> apps/boutique/base/kustomization.yaml
 
-say "  ✅ base/kustomization.yaml 생성 (내 GitHub URL 참조)"
+say "  ✅ base/kustomization.yaml 생성 (로컬 파일 참조)"
 
-# ── overlays/dev/kustomization.yaml ──
-say "\n[3/4] Kustomize overlay(dev) 구성 중..."
+# ---------- overlays/dev/kustomization.yaml ----------
+say "\n[4/5] Kustomize overlay(dev) 구성 중..."
 
-# images 블록 동적 생성
 IMAGES_BLOCK=""
 for svc in $BOUTIQUE_SERVICES; do
   IMAGES_BLOCK="${IMAGES_BLOCK}
@@ -194,17 +257,13 @@ cat > apps/boutique/overlays/dev/kustomization.yaml <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# [장애 ② 수정] namespace: demo 하드코딩 제거
-# 20-k8s-bootstrap-phase3.sh Q4에서 입력한 TARGET_NS 값으로 동적 주입
 namespace: ${TARGET_NS}
 
 resources:
   - ../../base
 
 # ---------------------------------------------------------------------------
-# [장애 ③ 수정] imagePullSecrets 전체 Deployment에 주입
-# 20-k8s-bootstrap-phase3.sh가 생성한 gitlab-regcred secret을 참조
-# 프라이빗 레지스트리(GitLab)에서 이미지를 pull하기 위한 인증 정보
+# imagePullSecrets 전체 Deployment에 주입
 # ---------------------------------------------------------------------------
 patches:
   - patch: |-
@@ -221,11 +280,8 @@ patches:
       kind: Deployment
 
   # ---------------------------------------------------------------------------
-  # [MetalLB IP 충돌 수정] frontend-external Service 타입 변경
-  # upstream 원본: Type=LoadBalancer → MetalLB IP 추가 소모 발생
-  # 설계 의도: 외부 진입점은 Ingress-Nginx 단일 VIP로 통일
-  #   외부 → MetalLB VIP → Ingress-Nginx → frontend(ClusterIP) → Pod
-  # ClusterIP로 변경하여 VIP를 Ingress-Nginx 전용으로 확보
+  # frontend-external Service 타입 변경
+  # LoadBalancer → ClusterIP (MetalLB IP 충돌 방지, Ingress-Nginx로 통일)
   # ---------------------------------------------------------------------------
   - patch: |-
       apiVersion: v1
@@ -240,7 +296,7 @@ patches:
 
 # ---------------------------------------------------------------------------
 # 이미지 교체 테이블
-# name    : upstream 원본 이미지 이름 (CI의 UPSTREAM_PREFIX와 반드시 일치)
+# name    : upstream 원본 이미지 이름
 # newName : 우리 GitLab Registry 경로
 # newTag  : CI_COMMIT_SHORT_SHA (CI 파이프라인이 자동 갱신)
 # ---------------------------------------------------------------------------
@@ -250,38 +306,52 @@ EOF
 
 say "  ✅ overlays/dev/kustomization.yaml 생성 (10개 서비스)"
 
-# ---------- README + .gitignore ----------
-say "\n[4/4] gitops-repo push 중..."
+# ---------- README ----------
 cat > README.md <<'EOF'
-# GitOps Repository — Online Boutique
+# GitOps Repository — Online Boutique (v2 로컬 파일 방식)
 
 ## 구조
 
 ```
 apps/boutique/
   base/
-    adservice.yaml / cartservice.yaml ...  ← 서비스별 직접 작성 (11개)
-    kustomization.yaml         ← 로컬 파일 참조 + loadgenerator 제외
+    adservice.yaml          ← Google Online Boutique 원본 매니페스트 (로컬 저장)
+    cartservice.yaml
+    ... (10개 서비스)
+    kustomization.yaml      ← 로컬 파일 참조 (./adservice.yaml 등)
   overlays/
-    dev/                       ← Argo CD가 바라보는 경로
-      kustomization.yaml       ← CI가 이미지 태그를 자동 업데이트
+    dev/
+      kustomization.yaml    ← CI가 이미지 태그를 자동 업데이트
 ```
 
-## 설계 원칙
+## v2 변경 사유
 
-- `base/*.yaml` : 서비스별 독립 파일 (직접 수정 금지, 재실행으로 재생성)
-- `overlays/dev/kustomization.yaml` : 환경별 커스터마이징만 선언
-  - namespace 주입
-  - imagePullSecrets 주입 (gitlab-regcred)
-  - frontend-external → ClusterIP 변환
-  - 이미지 교체 (우리 Registry + CI SHA 태그)
+- v1: base/kustomization.yaml 이 GitHub raw URL 참조
+  - 문제: Argo CD가 GitHub 파일을 직접 추적 불가
+  - 문제: 리소스 수정 후 Sync 해도 반영 안 되는 현상
+- v2: Google Online Boutique kubernetes-manifests/ 를 직접 clone → 로컬 저장
+  - 장점: Argo CD가 이 레포 안의 파일만 추적 (단순 명확)
+  - 장점: 파일 수정 → commit → push → Sync 으로 즉시 반영
 
-## 버전 업그레이드 방법
+## 리소스(requests/limits) 수정 방법
 
 ```bash
-# 새 버전으로 재실행
-./31-setup-gitops-repo.sh .env.gitops-lab
-# 버전 입력 시 새 태그 입력 (예: v0.11.0)
+# 1. gitops-repo clone
+git clone <gitops-repo-url>
+cd gitops-repo
+
+# 2. 원하는 서비스 YAML 편집
+vi apps/boutique/base/adservice.yaml
+# resources.requests.cpu / memory 값 수정
+
+# 3. commit & push
+git add apps/boutique/base/adservice.yaml
+git commit -m "fix: adservice 리소스 limits 조정"
+git push
+
+# 4. Argo CD Sync
+# UI: Sync 버튼 클릭
+# 또는 auto-sync 켜져 있으면 자동 반영
 ```
 
 ## 이미지 태그 업데이트 흐름
@@ -290,17 +360,17 @@ apps/boutique/
 app-repo 코드 push
   → GitLab CI 빌드
   → Registry push
-  → gitops-repo overlays/dev/kustomization.yaml 태그 업데이트
+  → gitops-repo overlays/dev/kustomization.yaml 태그 업데이트 (CI 자동)
   → Argo CD auto-sync → K8s rolling update
 ```
 
 ## 주의사항
 
 - `overlays/dev/kustomization.yaml`의 `images[].newTag`는 CI가 자동 관리합니다.
-- 수동으로 수정하지 마세요. 수정이 필요하면 app-repo에 커밋하세요.
+- 수동으로 수정하지 마세요.
+- 리소스 수정은 `base/*.yaml` 파일을 직접 편집하세요.
 EOF
 
-# ---------- .gitignore ----------
 cat > .gitignore <<'EOF'
 *.env
 *.env.*
@@ -308,37 +378,44 @@ cat > .gitignore <<'EOF'
 EOF
 
 # ---------- push ----------
-say "\n✅ gitops-repo push 준비 완료. push 중..."
+say "\n[5/5] gitops-repo push 중..."
 git add -A
 git status
 
-# 변경 없으면 스킵
 if git diff --cached --quiet; then
   warn "  변경 없음 → push 스킵 (이미 최신 상태)"
 else
-  git commit -m "feat: Kustomize structure with GitHub-hosted yaml references
+  git commit -m "feat: v2 로컬 YAML 방식으로 전환
 
-- base: 내 GitHub 레포 yaml 파일을 raw URL로 참조
-  (github.com/msp-architect-2026/kim-jaehoon/devops-lab-infra)
-- overlays/dev: namespace, imagePullSecrets, frontend-external 설정
-- yaml 수정은 GitHub에서 직접 → commit → Argo CD 자동 반영
+변경 내용:
+- base/: Google Online Boutique kubernetes-manifests 직접 clone → 로컬 저장
+- base/kustomization.yaml: GitHub raw URL 참조 제거 → 로컬 파일 참조
+- overlays/dev: namespace, imagePullSecrets, frontend-external, 이미지 교체 유지
 
-Setup: 31-setup-gitops-repo.sh"
+배경:
+- v1 GitHub URL 방식에서 리소스 수정 후 Argo CD Sync 미반영 문제 발생
+- Argo CD가 gitops-repo 내부 파일만 추적하도록 단순화
+
+Setup: 31-setup-gitops-repo.sh v2"
 
   git push -u origin main
 fi
 
-say "\n✅ gitops-repo 구성 완료!"
+say "\n✅ gitops-repo 구성 완료! (v2 로컬 파일 방식)"
 
 echo ""
 echo "=================================================="
-echo " 🎉 Step 2 완료: gitops-repo Kustomize 구조 생성"
+echo " 🎉 Step 2 완료: gitops-repo Kustomize 구조 생성 (v2)"
 echo "=================================================="
 echo "  GitLab URL    : ${GITLAB_URL}/${GROUP}/${GITOPS_PROJECT}"
 echo "  Argo CD path  : apps/boutique/overlays/dev"
-echo "  base 구조   : 내 GitHub raw URL 참조 (10개 서비스)"
-echo "  서비스 수      : 10개 (loadgenerator 제외)"
+echo "  base 구조     : 로컬 YAML 파일 (10개 서비스)"
+echo ""
+echo "  [리소스 수정 방법]"
+echo "  1. gitops-repo clone"
+echo "  2. apps/boutique/base/{서비스}.yaml 편집"
+echo "  3. git commit && git push"
+echo "  4. Argo CD Sync"
 echo ""
 echo "  → 다음 단계: ./32-setup-gitlab-ci.sh 실행"
-echo "              .gitlab-ci.yml 완성본을 app-repo에 push"
 echo "=================================================="
