@@ -37,9 +37,6 @@ source "$ENV_FILE"
 
 # ==============================================================================
 # [안전망] GITLAB_CA_CERT 상대 경로 → 절대 경로 변환
-# 이 스크립트는 내부에서 cd "$WORK_DIR" 으로 디렉터리를 이동하므로
-# 상대 경로가 .env에 남아있으면 GIT_SSL_CAINFO / TLS_OPTS 경로를 잃어 SSL 오류 발생
-# → source 직후 .env 파일 위치 기준으로 절대 경로 변환하여 방어
 # ==============================================================================
 if [[ -n "${GITLAB_CA_CERT:-}" && "${GITLAB_CA_CERT}" != /* ]]; then
   _env_dir="$(cd "$(dirname "$(realpath "$ENV_FILE")")" && pwd)"
@@ -63,10 +60,6 @@ if [[ "$GITLAB_URL" =~ ^http:// ]]; then
 fi
 
 # ---------- CA 파일 경로 결정 ----------
-# 우선순위:
-#   1. env의 GITLAB_CA_CERT (위에서 이미 절대 경로로 변환 완료)
-#   2. install-ca-all.sh 가 등록한 표준 경로
-#   3. 홈 디렉터리에 수동 복사한 경우
 resolve_ca_cert() {
   local candidates=(
     "${GITLAB_CA_CERT:-}"
@@ -75,7 +68,6 @@ resolve_ca_cert() {
     "$HOME/ca.crt"
   )
   for path in "${candidates[@]}"; do
-    # 절대 경로 변환 후 존재 확인 (혹시 남아있는 상대 경로 방어)
     if [[ -n "$path" ]]; then
       local abs_path
       abs_path="$(realpath "$path" 2>/dev/null || true)"
@@ -127,8 +119,6 @@ OK="${OK:-n}"
 }
 
 # ---------- TLS / git SSL 설정 ----------
-# CA_CERT는 resolve_ca_cert()에서 이미 절대 경로로 확인됨
-# cd 이후에도 경로를 잃지 않음
 TLS_OPTS=(--cacert "$CA_CERT" -L)
 ADMIN_HDR=(-H "PRIVATE-TOKEN: ${GITLAB_ADMIN_TOKEN}")
 export GIT_SSL_CAINFO="$CA_CERT"
@@ -228,12 +218,18 @@ say "\n[3/3] .gitlab-ci.yml 완성본 app-repo에 push 중..."
 WORK_DIR="/tmp/ci-yml-push-$$"
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
-trap 'rm -rf "$WORK_DIR"' EXIT
+trap 'rm -f ~/.git-credentials; git config --global --unset credential.helper || true; rm -rf "$WORK_DIR"' EXIT
 
-AUTH_URL="$(echo "$APP_REPO_URL" | \
-  sed "s#https://#https://root:${GITLAB_ADMIN_TOKEN}@#")"
+GITLAB_HOST="$(echo "$GITLAB_URL" | sed -E 's#^https?://##' | sed -E 's#/.*##')"
 
-git clone "$AUTH_URL" "${WORK_DIR}/app-repo"
+# [수정] 토큰을 URL에 직접 삽입하지 않고 credential helper 사용
+# → .git/config 및 로그에 토큰 노출 방지
+git config --global credential.helper store
+printf "https://root:%s@%s\n" "${GITLAB_ADMIN_TOKEN}" "${GITLAB_HOST}" \
+  > ~/.git-credentials
+chmod 600 ~/.git-credentials
+
+git clone "$APP_REPO_URL" "${WORK_DIR}/app-repo"
 cd "${WORK_DIR}/app-repo"
 
 git config user.name "gitlab-ci-setup"
@@ -258,6 +254,10 @@ Setup: 32-setup-gitlab-ci.sh"
   git push origin main
   say "✅ .gitlab-ci.yml push 완료"
 fi
+
+# push 완료 후 즉시 credential 제거
+rm -f ~/.git-credentials
+git config --global --unset credential.helper || true
 
 echo ""
 echo "=================================================="
