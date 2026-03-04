@@ -1,0 +1,269 @@
+# ==========================================
+# 1. Global Security Policies (전역 보안 정책)
+# ==========================================
+# 모든 파드의 인/아웃바운드 통신을 기본적으로 차단합니다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-policy
+  namespace: boutique
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# ==========================================
+# 2. System Policies (시스템 필수 통신 정책)
+# ==========================================
+# 클러스터 내 모든 파드가 CoreDNS와 통신하여 서비스 이름을 해석할 수 있도록 허용합니다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dns-egress-policy
+  namespace: boutique
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+---
+# Alloy 에이전트가 메트릭 수집을 위해 모든 파드에 접근할 수 있도록 허용합니다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-ingress-policy
+  namespace: boutique
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+---
+# ==========================================
+# 3. Microservice Policies (서비스별 통신 제어)
+# ==========================================
+# Frontend 서비스: 외부 트래픽 수신 및 백엔드 서비스 호출
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-policy
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  - to: [{podSelector: {matchLabels: {app: adservice}}}]
+    ports: [{protocol: TCP, port: 9555}]
+  - to: [{podSelector: {matchLabels: {app: cartservice}}}]
+    ports: [{protocol: TCP, port: 7070}]
+  - to: [{podSelector: {matchLabels: {app: checkoutservice}}}]
+    ports: [{protocol: TCP, port: 5050}]
+  - to: [{podSelector: {matchLabels: {app: currencyservice}}}]
+    ports: [{protocol: TCP, port: 7000}]
+  - to: [{podSelector: {matchLabels: {app: productcatalogservice}}}]
+    ports: [{protocol: TCP, port: 3550}]
+  - to: [{podSelector: {matchLabels: {app: recommendationservice}}}]
+    ports: [{protocol: TCP, port: 8080}]
+  - to: [{podSelector: {matchLabels: {app: shippingservice}}}]
+    ports: [{protocol: TCP, port: 50051}]
+---
+# Checkout 서비스: 결제 및 주문 처리 흐름
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: checkoutservice-policy
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: checkoutservice
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: frontend}}}]
+    ports: [{protocol: TCP, port: 5050}]
+  egress:
+  - to: [{podSelector: {matchLabels: {app: cartservice}}}]
+    ports: [{protocol: TCP, port: 7070}]
+  - to: [{podSelector: {matchLabels: {app: currencyservice}}}]
+    ports: [{protocol: TCP, port: 7000}]
+  - to: [{podSelector: {matchLabels: {app: emailservice}}}]
+    ports: [{protocol: TCP, port: 8080}]
+  - to: [{podSelector: {matchLabels: {app: paymentservice}}}]
+    ports: [{protocol: TCP, port: 50051}]
+  - to: [{podSelector: {matchLabels: {app: productcatalogservice}}}]
+    ports: [{protocol: TCP, port: 3550}]
+  - to: [{podSelector: {matchLabels: {app: shippingservice}}}]
+    ports: [{protocol: TCP, port: 50051}]
+---
+# Ad 서비스
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: adservice-policy
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: adservice
+  policyTypes: [Ingress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: frontend}}}]
+    ports: [{protocol: TCP, port: 9555}]
+---
+# Cart 서비스: Redis와 통신
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cartservice-policy
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: cartservice
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from: 
+    - podSelector: {matchLabels: {app: frontend}}
+    - podSelector: {matchLabels: {app: checkoutservice}}
+    ports: [{protocol: TCP, port: 7070}]
+  egress:
+  - to: [{podSelector: {matchLabels: {app: redis-cart}}}]
+    ports: [{protocol: TCP, port: 6379}]
+---
+# Currency 서비스
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: currencyservice-policy
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: currencyservice
+  policyTypes: [Ingress]
+  ingress:
+  - from: 
+    - podSelector: {matchLabels: {app: frontend}}
+    - podSelector: {matchLabels: {app: checkoutservice}}
+    ports: [{protocol: TCP, port: 7000}]
+---
+# Email 서비스
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: emailservice-policy
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: emailservice
+  policyTypes: [Ingress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: checkoutservice}}}]
+    ports: [{protocol: TCP, port: 8080}]
+---
+# Payment 서비스
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: paymentservice-policy
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: paymentservice
+  policyTypes: [Ingress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: checkoutservice}}}]
+    ports: [{protocol: TCP, port: 50051}]
+---
+# ProductCatalog 서비스
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: productcatalogservice-policy
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: productcatalogservice
+  policyTypes: [Ingress]
+  ingress:
+  - from: 
+    - podSelector: {matchLabels: {app: frontend}}
+    - podSelector: {matchLabels: {app: checkoutservice}}
+    - podSelector: {matchLabels: {app: recommendationservice}}
+    ports: [{protocol: TCP, port: 3550}]
+---
+# Recommendation 서비스
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: recommendationservice-policy
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: recommendationservice
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: frontend}}}]
+    ports: [{protocol: TCP, port: 8080}]
+  egress:
+  - to: [{podSelector: {matchLabels: {app: productcatalogservice}}}]
+    ports: [{protocol: TCP, port: 3550}]
+---
+# Shipping 서비스
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shippingservice-policy
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: shippingservice
+  policyTypes: [Ingress]
+  ingress:
+  - from: 
+    - podSelector: {matchLabels: {app: frontend}}
+    - podSelector: {matchLabels: {app: checkoutservice}}
+    ports: [{protocol: TCP, port: 50051}]
+---
+# Redis Cart 데이터베이스
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-cart-policy
+  namespace: boutique
+spec:
+  podSelector:
+    matchLabels:
+      app: redis-cart
+  policyTypes: [Ingress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: cartservice}}}]
+    ports: [{protocol: TCP, port: 6379}]
