@@ -30,9 +30,6 @@ source "$ENV_FILE"
 
 # ==============================================================================
 # [안전망] GITLAB_CA_CERT 상대 경로 → 절대 경로 변환
-# 이 스크립트는 내부에서 cd "$WORK_DIR" 으로 디렉터리를 이동하므로
-# 상대 경로가 .env에 남아있으면 GIT_SSL_CAINFO 경로를 잃어 SSL 오류 발생
-# → source 직후 .env 파일 위치 기준으로 절대 경로 변환하여 방어
 # ==============================================================================
 if [[ -n "${GITLAB_CA_CERT:-}" && "${GITLAB_CA_CERT}" != /* ]]; then
   _env_dir="$(cd "$(dirname "$(realpath "$ENV_FILE")")" && pwd)"
@@ -45,6 +42,7 @@ fi
 : "${GITOPS_PUSH_USER:?GITOPS_PUSH_USER가 env에 없습니다}"
 : "${GITOPS_PUSH_TOKEN:?GITOPS_PUSH_TOKEN이 env에 없습니다}"
 : "${GROUP:?GROUP이 env에 없습니다}"
+: "${GITLAB_ADMIN_TOKEN:?GITLAB_ADMIN_TOKEN이 env에 없습니다. .env.gitops-lab에 추가하세요}"
 
 # ---------- GITLAB_URL https 강제 검증 ----------
 if [[ "$GITLAB_URL" =~ ^http:// ]]; then
@@ -56,10 +54,6 @@ if [[ "$GITLAB_URL" =~ ^http:// ]]; then
 fi
 
 # ---------- CA 파일 경로 결정 ----------
-# 우선순위:
-#   1. env의 GITLAB_CA_CERT (위에서 이미 절대 경로로 변환 완료)
-#   2. install-ca-all.sh 가 등록한 표준 경로 (Master Node 기준)
-#   3. 홈 디렉터리에 수동 복사한 경우
 resolve_ca_cert() {
   local candidates=(
     "${GITLAB_CA_CERT:-}"
@@ -68,7 +62,6 @@ resolve_ca_cert() {
     "$HOME/ca.crt"
   )
   for path in "${candidates[@]}"; do
-    # 절대 경로 변환 후 존재 확인 (혹시 남아있는 상대 경로 방어)
     if [[ -n "$path" ]]; then
       local abs_path
       abs_path="$(realpath "$path" 2>/dev/null || true)"
@@ -100,16 +93,10 @@ fi
 APP_PROJECT="${APP_PROJECT:-app-repo}"
 APP_REPO_URL="${GITLAB_URL}/${GROUP}/${APP_PROJECT}.git"
 
-# ==============================================================================
-# [변경] 소스코드 출처: 구글 upstream → 내 GitHub 레포
-# 내 GitHub의 phase4-gitops-setup/app-source/src/ 만 가져옴
-# loadgenerator, shoppingassistantservice 는 CI 빌드 대상 제외
-# ==============================================================================
 BOUTIQUE_UPSTREAM="https://github.com/msp-architect-2026/kim-jaehoon.git"
 BOUTIQUE_BRANCH="devops-lab-infra"
 BOUTIQUE_SRC_PATH="phase4-gitops-setup/app-source/src"
 
-# loadgenerator 제외 10개
 BOUTIQUE_SERVICES="adservice cartservice checkoutservice currencyservice emailservice frontend paymentservice productcatalogservice recommendationservice shippingservice"
 
 WORK_DIR="/tmp/boutique-setup-$$"
@@ -128,8 +115,6 @@ OK="${OK:-n}"
 [[ "$OK" =~ ^[Yy]$ ]] || { echo "취소"; exit 0; }
 
 # ---------- git SSL 설정 ----------
-# CA_CERT는 resolve_ca_cert()에서 이미 절대 경로로 확인됨
-# cd 이후에도 경로를 잃지 않음
 export GIT_SSL_CAINFO="$CA_CERT"
 git config --global http.sslCAInfo "$CA_CERT"
 say "✅ git SSL CA 설정 완료: ${CA_CERT}"
@@ -170,8 +155,6 @@ say "✅ sparse checkout 완료: ${BOUTIQUE_SRC_PATH}"
 # ---------- 2. 불필요 파일 제거 + git 초기화 ----------
 say "\n[2/4] loadgenerator/shoppingassistantservice 제거 및 git 초기화..."
 
-# src/ 를 루트로 재구성
-# (GitLab app-repo는 src/ 를 루트로 기대함)
 cp -r "${BOUTIQUE_SRC_PATH}" /tmp/boutique-src-$$
 cd "$WORK_DIR"
 rm -rf boutique
@@ -183,7 +166,6 @@ cd boutique
 rm -rf loadgenerator shoppingassistantservice 2>/dev/null || true
 say "  ✅ loadgenerator / shoppingassistantservice 제거"
 
-# 새 저장소로 초기화
 git init -b main
 git config user.name "gitlab-ci-setup"
 git config user.email "setup@local"
@@ -222,17 +204,25 @@ EOF
 
 # ---------- 5. app-repo push ----------
 say "\n[4/4] app-repo push 중..."
-: "${GITLAB_ADMIN_TOKEN:?GITLAB_ADMIN_TOKEN이 env에 없습니다. .env.gitops-lab에 추가하세요}"
 
-AUTH_URL="$(echo "$APP_REPO_URL" | \
-  sed "s#https://#https://root:${GITLAB_ADMIN_TOKEN}@#")"
+GITLAB_HOST="$(echo "$GITLAB_URL" | sed -E 's#^https?://##' | sed -E 's#/.*##')"
+
+# [수정] 토큰을 URL에 직접 삽입하지 않고 credential helper 사용
+# → .git/config 및 로그에 토큰 노출 방지
+git config --global credential.helper store
+printf "https://root:%s@%s\n" "${GITLAB_ADMIN_TOKEN}" "${GITLAB_HOST}" \
+  > ~/.git-credentials
+chmod 600 ~/.git-credentials
 
 git add -A
 git commit -m "feat: initial Online Boutique source from my GitHub (loadgenerator excluded)"
 
-git remote add origin "$AUTH_URL"
-# force push: app-repo에 이미 .gitlab-ci.yml 커밋이 존재하므로 덮어씀
+git remote add origin "$APP_REPO_URL"
 git push -u origin main --force
+
+# push 완료 후 즉시 credential 제거
+rm -f ~/.git-credentials
+git config --global --unset credential.helper || true
 
 say "\n✅ app-repo push 완료!"
 echo ""
