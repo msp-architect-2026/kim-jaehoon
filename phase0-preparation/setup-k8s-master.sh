@@ -5,14 +5,13 @@
 # 특징: IP 자동 감지, Calico CNI 설치, Join 명령어 파일 저장
 # ==============================================================================
 
-set -e
+set -euo pipefail
 
 echo "=================================================="
 echo " 🚀 Kubernetes Master Node 초기화 시작 (Calico)"
 echo "=================================================="
 
 # --- 0. 실행 전 체크 ---
-# 루트 권한인지 확인하지 않음 (sudo를 명령어 앞에 붙임) but containerd 확인
 if ! systemctl is-active --quiet containerd; then
     echo "❌ Error: containerd가 실행 중이 아닙니다."
     echo "   sudo systemctl enable --now containerd 명령어를 먼저 실행하세요."
@@ -20,14 +19,12 @@ if ! systemctl is-active --quiet containerd; then
 fi
 
 # --- 1. IP 주소 및 CIDR 설정 ---
-# IP 자동 감지
 DETECTED_IP=$(ip route get 8.8.8.8 | grep -oP 'src \K\S+')
 echo ""
 echo "Detected IP: $DETECTED_IP"
 read -t 10 -p "▶ API Server IP 확인 [Enter 입력 시 $DETECTED_IP 사용]: " MASTER_IP || MASTER_IP=$DETECTED_IP
 MASTER_IP=${MASTER_IP:-$DETECTED_IP}
 
-# Pod Network CIDR 설정 (기본값: 10.244.0.0/16 - Flannel 대역이지만 충돌 방지용으로 좋음)
 DEFAULT_CIDR="10.244.0.0/16"
 echo ""
 read -t 10 -p "▶ Pod Network CIDR 확인 [Enter 입력 시 $DEFAULT_CIDR 사용]: " POD_CIDR || POD_CIDR=$DEFAULT_CIDR
@@ -52,7 +49,6 @@ sudo kubeadm config images pull
 
 echo ""
 echo "[2/5] Master Node 초기화 중..."
-# 초기화 로그를 파일로도 남김 (혹시 모를 에러 분석용)
 sudo kubeadm init \
   --apiserver-advertise-address="$MASTER_IP" \
   --pod-network-cidr="$POD_CIDR" | tee kubeadm-init.log
@@ -64,6 +60,23 @@ mkdir -p "$HOME/.kube"
 sudo cp -f /etc/kubernetes/admin.conf "$HOME/.kube/config"
 sudo chown "$(id -u):$(id -g)" "$HOME/.kube/config"
 
+# --- [수정] API 서버 Ready 대기 ---
+# kubeadm init 직후 API 서버가 완전히 뜨기 전에 kubectl 호출하면 실패함
+# 느린 VM 환경에서 특히 필요
+echo ""
+echo "⏳ API 서버 준비 대기 중..."
+WAIT_RETRY=0
+until kubectl get nodes >/dev/null 2>&1; do
+    WAIT_RETRY=$((WAIT_RETRY + 1))
+    if [ $WAIT_RETRY -ge 20 ]; then
+        echo "❌ API 서버가 60초 내에 준비되지 않았습니다."
+        exit 1
+    fi
+    echo "   대기 중... (${WAIT_RETRY}/20)"
+    sleep 3
+done
+echo "✅ API 서버 준비 완료"
+
 # --- 4. Calico CNI 설치 ---
 echo ""
 echo "[4/5] Calico CNI 플러그인 설치 중..."
@@ -71,25 +84,30 @@ echo "[4/5] Calico CNI 플러그인 설치 중..."
 # Tigera Operator 설치
 kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/tigera-operator.yaml
 
+# [수정] Operator Pod Ready 대기 (CRD 등록 전에 custom-resources 적용하면 실패)
+echo "⏳ Tigera Operator 준비 대기 중..."
+kubectl wait --for=condition=Ready pod \
+    -l app=tigera-operator \
+    -n tigera-operator \
+    --timeout=120s
+
 # Custom Resources 다운로드
 curl -fsSL https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml -o custom-resources.yaml
 
-# CIDR 설정 변경 (sed 구분자로 | 사용)
+# CIDR 설정 변경
 if [ "$POD_CIDR" != "192.168.0.0/16" ]; then
     echo "Info: Calico 설정을 사용자 지정 CIDR($POD_CIDR)로 변경합니다."
     sed -i "s|192.168.0.0/16|$POD_CIDR|g" custom-resources.yaml
 fi
 
-# 설정 적용
 kubectl apply -f custom-resources.yaml
 rm custom-resources.yaml
 
-# --- 5. Join 명령어 추출 및 저장 (핵심 기능) ---
+# --- 5. Join 명령어 추출 및 저장 ---
 echo ""
 echo "[5/5] 워커 노드 Join 명령어 생성 중..."
 
-# 토큰 생성 및 해시값 추출하여 명령어 조합
-JOIN_CMD=$(kubeadm token create --print-join-command 2>/dev/null)
+JOIN_CMD=$(sudo kubeadm token create --print-join-command 2>/dev/null)
 
 if [ -n "$JOIN_CMD" ]; then
     echo "$JOIN_CMD" > join_command.sh
