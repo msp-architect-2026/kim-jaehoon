@@ -13,9 +13,10 @@ variables:
   GITOPS_FILE: "apps/boutique/overlays/dev/kustomization.yaml"
   CI_GROUP: "root"
   CI_APP_PROJECT: "app-repo"
-  # [수정 1] UPSTREAM_REGISTRY 제거
-  # base/*.yaml의 image 필드가 짧은 이름(adservice, frontend 등)이므로
-  # GCP 경로 prefix 불필요 → MATCH_NAME을 서비스명 단독으로 사용
+  # [수정] UPSTREAM_REGISTRY 추가
+  # base/*.yaml의 image 필드가 GCP 전체 경로이므로
+  # kustomization.yaml images[].name 매칭에 필요
+  UPSTREAM_REGISTRY: "us-central1-docker.pkg.dev/google-samples/microservices-demo"
   BOUTIQUE_SERVICES: >-
     adservice
     cartservice
@@ -179,12 +180,10 @@ update_gitops_tags:
       fi
 
       for svc in $BOUTIQUE_SERVICES; do
-        # [수정 2] MATCH_NAME = 짧은 이름 단독 사용
-        # 기존: MATCH_NAME="${UPSTREAM_REGISTRY}/${svc}"
-        # 변경: MATCH_NAME="${svc}"
-        # 이유: base/*.yaml의 image 필드가 "frontend", "adservice" 등 짧은 이름이므로
-        #       overlay kustomization.yaml의 images[].name도 짧은 이름으로 맞춰져 있음
-        MATCH_NAME="${svc}"
+        # [수정] MATCH_NAME = GCP 전체 경로 사용
+        # kustomization.yaml images[].name 이 GCP 전체 경로로 저장되어 있으므로
+        # 짧은 이름(adservice)으로 매칭 시 yq가 찾지 못해 태그 업데이트 무효
+        MATCH_NAME="${UPSTREAM_REGISTRY}/${svc}"
         NEW_NAME="${OUR_REGISTRY}/${svc}"
         NEW_TAG="${IMAGE_TAG}"
 
