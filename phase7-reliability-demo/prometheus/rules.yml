@@ -1,0 +1,94 @@
+groups:
+  - name: 1순위-서비스생사
+    rules:
+      - alert: PodCrashLooping
+        expr: kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          description: '{{ $labels.namespace }}/{{ $labels.pod }} CrashLoopBackOff 발생'
+
+      - alert: PodNotRunning
+        expr: kube_pod_status_phase{phase=~"Failed|Unknown"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          description: '{{ $labels.namespace }}/{{ $labels.pod }} 비정상 상태'
+
+      - alert: PodRestartTooMany
+        expr: kube_pod_container_status_restarts_total > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          description: '{{ $labels.namespace }}/{{ $labels.pod }} 재시작 {{ $value }}회 초과'
+
+  - name: 2순위-핵심서비스
+    rules:
+      - alert: CartServiceDown
+        expr: kube_deployment_status_replicas_available{namespace="boutique", deployment="cartservice"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          description: 'cartservice 다운 - 장바구니 서비스 불가'
+
+      - alert: CheckoutServiceDown
+        expr: kube_deployment_status_replicas_available{namespace="boutique", deployment="checkoutservice"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          description: 'checkoutservice 다운 - 결제 불가'
+
+      - alert: PaymentServiceDown
+        expr: kube_deployment_status_replicas_available{namespace="boutique", deployment="paymentservice"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          description: 'paymentservice 다운 - 결제 불가'
+
+      - alert: RedisCartDown
+        expr: kube_deployment_status_replicas_available{namespace="boutique", deployment="redis-cart"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          description: 'redis-cart 다운 - 장바구니 데이터 유실 위험'
+
+      - alert: FrontendDown
+        expr: kube_deployment_status_replicas_available{namespace="boutique", deployment="frontend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          description: 'frontend 다운 - 사이트 전체 접근 불가'
+
+  - name: 3순위-인프라리소스
+    rules:
+      - alert: NodeCPUHigh
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          description: '{{ $labels.instance }} CPU 사용률 {{ $value | printf "%.1f" }}% 초과'
+
+      - alert: NodeMemoryHigh
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          description: '{{ $labels.instance }} 메모리 사용률 {{ $value | printf "%.1f" }}% 초과'
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          description: 'Redis 메모리 사용률 {{ $value | printf "%.1f" }}% 초과 - 장바구니 데이터 위험'
