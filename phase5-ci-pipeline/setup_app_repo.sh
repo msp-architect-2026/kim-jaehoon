@@ -93,9 +93,9 @@ fi
 APP_PROJECT="${APP_PROJECT:-app-repo}"
 APP_REPO_URL="${GITLAB_URL}/${GROUP}/${APP_PROJECT}.git"
 
-BOUTIQUE_UPSTREAM="https://github.com/msp-architect-2026/kim-jaehoon.git"
-BOUTIQUE_BRANCH="devops-lab-infra"
-BOUTIQUE_SRC_PATH="phase4-gitops-setup/app-source/src"
+BOUTIQUE_UPSTREAM="https://github.com/GoogleCloudPlatform/microservices-demo.git"
+BOUTIQUE_BRANCH="main"
+BOUTIQUE_SRC_PATH="src"
 
 BOUTIQUE_SERVICES="adservice cartservice checkoutservice currencyservice emailservice frontend paymentservice productcatalogservice recommendationservice shippingservice"
 
