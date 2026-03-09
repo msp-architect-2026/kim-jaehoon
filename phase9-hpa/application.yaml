@@ -12,7 +12,7 @@ spec:
       helm:
         valueFiles:
           - $values/apps/descheduler/values.yaml
-    - repoURL: https://192.168.10.47/root/gitops-repo.git
+    - repoURL: https://<GITLAB_IP>/root/gitops-repo.git
       targetRevision: main
       ref: values
   destination:

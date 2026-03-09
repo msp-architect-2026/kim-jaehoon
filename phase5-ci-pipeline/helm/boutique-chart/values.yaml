@@ -1,5 +1,5 @@
 global:
-  registry: 192.168.10.47:5050/root/app-repo
+  registry: <REGISTRY_IP>:5050/root/app-repo
   namespace: boutique
   imagePullSecrets:
   - name: gitlab-regcred
