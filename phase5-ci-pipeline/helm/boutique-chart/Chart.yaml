@@ -1,0 +1,6 @@
+apiVersion: v2
+name: boutique
+description: Google Online Boutique MSA - Helm Chart (converted from Kustomize)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

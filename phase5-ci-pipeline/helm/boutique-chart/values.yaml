@@ -1,0 +1,381 @@
+global:
+  registry: 192.168.10.47:5050/root/app-repo
+  namespace: boutique
+  imagePullSecrets:
+  - name: gitlab-regcred
+topologySpreadConstraints:
+  enabled: true
+  maxSkew: 1
+  topologyKey: kubernetes.io/hostname
+  whenUnsatisfiable: ScheduleAnyway
+networkPolicy:
+  enabled: true
+  monitoringNamespace: monitoring
+  ingressNginxNamespace: ingress-nginx
+ingress:
+  enabled: true
+  className: nginx
+  host: boutique.com
+  tls:
+    enabled: true
+    secretName: boutique-tls-secret
+hpa:
+  defaultCpuUtilization: 50
+  scaleDownStabilizationWindow: 60
+services:
+  adservice:
+    enabled: false  # 광고 서비스, 핵심 플로우 무관 → 비활성화
+    image:
+      name: adservice
+      tag: 8f0fcd7a
+    containerPort: 9555
+    servicePort: 9555
+    serviceProtocol: grpc
+    terminationGracePeriodSeconds: 5
+    resources:
+      requests:
+        cpu: 100m
+        memory: 192Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+    env:
+    - name: PORT
+      value: '9555'
+    probe:
+      type: grpc
+      port: 9555
+      initialDelaySeconds: 20
+      periodSeconds: 15
+    hpa:
+      enabled: false
+  cartservice:
+    enabled: true
+    image:
+      name: cartservice
+      tag: 8f0fcd7a
+    containerPort: 7070
+    servicePort: 7070
+    serviceProtocol: grpc
+    terminationGracePeriodSeconds: 5
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+    env:
+    - name: REDIS_ADDR
+      value: redis-cart:6379
+    probe:
+      type: grpc
+      port: 7070
+      initialDelaySeconds: 15
+      periodSeconds: 10
+    hpa:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 5
+  checkoutservice:
+    enabled: true
+    image:
+      name: checkoutservice
+      tag: 8f0fcd7a
+    containerPort: 5050
+    servicePort: 5050
+    serviceProtocol: grpc
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi  # 64Mi → 128Mi (6개 서비스 직렬 호출, OOM 방지)
+    env:
+    - name: PORT
+      value: '5050'
+    - name: PRODUCT_CATALOG_SERVICE_ADDR
+      value: productcatalogservice:3550
+    - name: SHIPPING_SERVICE_ADDR
+      value: shippingservice:50051
+    - name: PAYMENT_SERVICE_ADDR
+      value: paymentservice:50051
+    - name: EMAIL_SERVICE_ADDR
+      value: emailservice:5000
+    - name: CURRENCY_SERVICE_ADDR
+      value: currencyservice:7000
+    - name: CART_SERVICE_ADDR
+      value: cartservice:7070
+    probe:
+      type: grpc
+      port: 5050
+      initialDelaySeconds: 20
+      periodSeconds: 15
+    hpa:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 3  # 2 → 3
+  currencyservice:
+    enabled: true
+    image:
+      name: currencyservice
+      tag: 8f0fcd7a
+    containerPort: 7000
+    servicePort: 7000
+    serviceProtocol: grpc
+    terminationGracePeriodSeconds: 5
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi  # 64Mi → 128Mi (실제 사용 53Mi, 한계치 너무 근접)
+    env:
+    - name: PORT
+      value: '7000'
+    - name: DISABLE_PROFILER
+      value: '1'
+    probe:
+      type: grpc
+      port: 7000
+      initialDelaySeconds: 20
+      periodSeconds: 15
+    hpa:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 5
+  emailservice:
+    enabled: false  # 주문 완료 이메일, checkout 비동기 호출이라 실패해도 결제 완료 → 비활성화
+    image:
+      name: emailservice
+      tag: 8f0fcd7a
+    containerPort: 8080
+    servicePort: 5000
+    serviceTargetPort: 8080
+    serviceProtocol: grpc
+    terminationGracePeriodSeconds: 5
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+    env:
+    - name: PORT
+      value: '8080'
+    - name: DISABLE_PROFILER
+      value: '1'
+    probe:
+      type: grpc
+      port: 8080
+      initialDelaySeconds: 20
+      periodSeconds: 5
+    hpa:
+      enabled: false
+  frontend:
+    enabled: true
+    image:
+      name: frontend
+      tag: 8f0fcd7a
+    containerPort: 8080
+    servicePort: 80
+    serviceTargetPort: 8080
+    annotations:
+      sidecar.istio.io/rewriteAppHTTPProbers: 'true'
+    securityContext:
+      fsGroup: 1000
+      runAsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 1000
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi  # 128Mi → 256Mi (모든 요청 진입점, OOM 방지)
+    env:
+    - name: PORT
+      value: '8080'
+    - name: PRODUCT_CATALOG_SERVICE_ADDR
+      value: productcatalogservice:3550
+    - name: CURRENCY_SERVICE_ADDR
+      value: currencyservice:7000
+    - name: CART_SERVICE_ADDR
+      value: cartservice:7070
+    - name: RECOMMENDATION_SERVICE_ADDR
+      value: recommendationservice:8080
+    - name: SHIPPING_SERVICE_ADDR
+      value: shippingservice:50051
+    - name: CHECKOUT_SERVICE_ADDR
+      value: checkoutservice:5050
+    - name: AD_SERVICE_ADDR
+      value: adservice:9555
+    - name: ENABLE_PROFILER
+      value: '0'
+    - name: SHOPPING_ASSISTANT_SERVICE_ADDR
+      value: shoppingassistantservice:80
+    probe:
+      type: http
+      path: /_healthz
+      port: 8080
+      httpHeaders:
+      - name: Cookie
+        value: shop_session-id=x-readiness-probe
+      initialDelaySeconds: 10
+    hpa:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 5  # 10 → 5 (워커 2대 한계 고려)
+  paymentservice:
+    enabled: true
+    image:
+      name: paymentservice
+      tag: 8f0fcd7a
+    containerPort: 50051
+    servicePort: 50051
+    serviceProtocol: grpc
+    terminationGracePeriodSeconds: 5
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi  # 64Mi → 128Mi (OOM 방지)
+    env:
+    - name: PORT
+      value: '50051'
+    - name: DISABLE_PROFILER
+      value: '1'
+    probe:
+      type: grpc
+      port: 50051
+      initialDelaySeconds: 20
+      periodSeconds: 15
+    hpa:
+      enabled: true  # 새로 활성화 (checkout 트래픽 비례)
+      minReplicas: 1
+      maxReplicas: 3
+  productcatalogservice:
+    enabled: true
+    image:
+      name: productcatalogservice
+      tag: 8f0fcd7a
+    containerPort: 3550
+    servicePort: 3550
+    serviceProtocol: grpc
+    terminationGracePeriodSeconds: 5
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    env:
+    - name: PORT
+      value: '3550'
+    - name: DISABLE_PROFILER
+      value: '1'
+    probe:
+      type: grpc
+      port: 3550
+      initialDelaySeconds: 20
+      periodSeconds: 15
+    hpa:
+      enabled: true  # 새로 활성화 (frontend + checkout 모두 호출)
+      minReplicas: 1
+      maxReplicas: 3
+  recommendationservice:
+    enabled: false  # 상품 추천, 없어도 구매 가능 → 비활성화
+    image:
+      name: recommendationservice
+      tag: 8f0fcd7a
+    containerPort: 8080
+    servicePort: 8080
+    serviceProtocol: grpc
+    terminationGracePeriodSeconds: 5
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+    env:
+    - name: PORT
+      value: '8080'
+    - name: PRODUCT_CATALOG_SERVICE_ADDR
+      value: productcatalogservice:3550
+    - name: DISABLE_PROFILER
+      value: '1'
+    probe:
+      type: grpc
+      port: 8080
+      initialDelaySeconds: 20
+      periodSeconds: 5
+    hpa:
+      enabled: false
+  shippingservice:
+    enabled: true
+    image:
+      name: shippingservice
+      tag: 8f0fcd7a
+    containerPort: 50051
+    servicePort: 50051
+    serviceProtocol: grpc
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi  # 64Mi → 128Mi (OOM 방지)
+    env:
+    - name: PORT
+      value: '50051'
+    - name: DISABLE_PROFILER
+      value: '1'
+    probe:
+      type: grpc
+      port: 50051
+      initialDelaySeconds: 20
+      periodSeconds: 5
+    hpa:
+      enabled: true  # 새로 활성화 (checkout 트래픽 비례)
+      minReplicas: 1
+      maxReplicas: 3
+  redis-cart:
+    enabled: true
+    image:
+      repository: redis
+      tag: alpine
+      useGlobalRegistry: false
+    containerPort: 6379
+    servicePort: 6379
+    serviceProtocol: tcp-redis
+    createServiceAccount: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+    volumeMounts:
+    - mountPath: /data
+      name: redis-data
+    volumes:
+    - name: redis-data
+      emptyDir: {}
+    probe:
+      type: tcp
+      port: 6379
+      initialDelaySeconds: 5
+      periodSeconds: 5
+    hpa:
+      enabled: false

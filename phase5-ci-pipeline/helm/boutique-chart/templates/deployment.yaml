@@ -1,0 +1,74 @@
+{{- range $svcName, $svc := .Values.services }}
+{{- if $svc.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $svcName }}
+  namespace: {{ $.Values.global.namespace }}
+  labels:
+    app: {{ $svcName }}
+    {{- include "boutique.labels" $ | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ $svcName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $svcName }}
+      {{- if $svc.annotations }}
+      annotations:
+        {{- range $k, $v := $svc.annotations }}
+        {{ $k }}: {{ $v | quote }}
+        {{- end }}
+      {{- end }}
+    spec:
+      {{- if ne (toString (dig "createServiceAccount" "true" $svc)) "false" }}
+      serviceAccountName: {{ $svcName }}
+      {{- end }}
+      {{- if $svc.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ $svc.terminationGracePeriodSeconds }}
+      {{- end }}
+      {{- if $svc.securityContext }}
+      securityContext:
+        {{- toYaml $svc.securityContext | nindent 8 }}
+      {{- else }}
+      {{- include "boutique.podSecurityContext" $ | nindent 6 }}
+      {{- end }}
+      imagePullSecrets:
+        {{- toYaml $.Values.global.imagePullSecrets | nindent 8 }}
+      {{- include "boutique.topologySpreadConstraints" (dict "Values" $.Values "svcName" $svcName) | nindent 6 }}
+      containers:
+        - name: server
+          {{- include "boutique.containerSecurityContext" $ | nindent 10 }}
+          image: {{ include "boutique.image" (dict "svc" $svc "global" $.Values.global) }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ $svc.containerPort }}
+          {{- if $svc.env }}
+          env:
+            {{- toYaml $svc.env | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          {{- if $svc.volumeMounts }}
+          volumeMounts:
+            {{- toYaml $svc.volumeMounts | nindent 12 }}
+          {{- end }}
+          {{- if $svc.probe }}
+          readinessProbe:
+            initialDelaySeconds: {{ $svc.probe.initialDelaySeconds | default 20 }}
+            periodSeconds: {{ $svc.probe.periodSeconds | default 15 }}
+            {{- include "boutique.probe" (dict "probe" $svc.probe) | nindent 12 }}
+          livenessProbe:
+            initialDelaySeconds: {{ $svc.probe.initialDelaySeconds | default 20 }}
+            periodSeconds: {{ $svc.probe.periodSeconds | default 15 }}
+            {{- include "boutique.probe" (dict "probe" $svc.probe) | nindent 12 }}
+          {{- end }}
+      {{- if $svc.volumes }}
+      volumes:
+        {{- toYaml $svc.volumes | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,263 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+# 1. 기본 차단 정책 (모든 인/아웃바운드)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# 2. CoreDNS 통신 허용
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dns-egress-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# 3. Alloy 모니터링 메트릭 수집 허용
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-ingress-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace }}
+---
+# 4. Frontend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNginxNamespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.services.frontend.containerPort }}
+  egress:
+    - to: [{podSelector: {matchLabels: {app: adservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.adservice.containerPort }}}]
+    - to: [{podSelector: {matchLabels: {app: cartservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.cartservice.containerPort }}}]
+    - to: [{podSelector: {matchLabels: {app: checkoutservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.checkoutservice.containerPort }}}]
+    - to: [{podSelector: {matchLabels: {app: currencyservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.currencyservice.containerPort }}}]
+    - to: [{podSelector: {matchLabels: {app: productcatalogservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.productcatalogservice.containerPort }}}]
+    - to: [{podSelector: {matchLabels: {app: recommendationservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.recommendationservice.containerPort }}}]
+    - to: [{podSelector: {matchLabels: {app: shippingservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.shippingservice.containerPort }}}]
+---
+# 5. Checkoutservice
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: checkoutservice-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: checkoutservice
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: frontend}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.checkoutservice.containerPort }}}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: cartservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.cartservice.containerPort }}}]
+    - to: [{podSelector: {matchLabels: {app: currencyservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.currencyservice.containerPort }}}]
+    - to: [{podSelector: {matchLabels: {app: emailservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.emailservice.containerPort }}}]
+    - to: [{podSelector: {matchLabels: {app: paymentservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.paymentservice.containerPort }}}]
+    - to: [{podSelector: {matchLabels: {app: productcatalogservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.productcatalogservice.containerPort }}}]
+    - to: [{podSelector: {matchLabels: {app: shippingservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.shippingservice.containerPort }}}]
+---
+# 6. Adservice
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: adservice-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: adservice
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: frontend}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.adservice.containerPort }}}]
+---
+# 7. Cartservice
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cartservice-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: cartservice
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: frontend}}
+        - podSelector: {matchLabels: {app: checkoutservice}}
+      ports: [{protocol: TCP, port: {{ .Values.services.cartservice.containerPort }}}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: redis-cart}}}]
+      ports: [{protocol: TCP, port: {{ index .Values.services "redis-cart" | dig "containerPort" 6379 }}}]
+---
+# 8. Currencyservice
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: currencyservice-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: currencyservice
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: frontend}}
+        - podSelector: {matchLabels: {app: checkoutservice}}
+      ports: [{protocol: TCP, port: {{ .Values.services.currencyservice.containerPort }}}]
+---
+# 9. Emailservice
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: emailservice-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: emailservice
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: checkoutservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.emailservice.containerPort }}}]
+---
+# 10. Paymentservice
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: paymentservice-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: paymentservice
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: checkoutservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.paymentservice.containerPort }}}]
+---
+# 11. Productcatalogservice
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: productcatalogservice-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: productcatalogservice
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: frontend}}
+        - podSelector: {matchLabels: {app: checkoutservice}}
+        - podSelector: {matchLabels: {app: recommendationservice}}
+      ports: [{protocol: TCP, port: {{ .Values.services.productcatalogservice.containerPort }}}]
+---
+# 12. Recommendationservice
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: recommendationservice-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: recommendationservice
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: frontend}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.recommendationservice.containerPort }}}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: productcatalogservice}}}]
+      ports: [{protocol: TCP, port: {{ .Values.services.productcatalogservice.containerPort }}}]
+---
+# 13. Shippingservice
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shippingservice-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: shippingservice
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: frontend}}
+        - podSelector: {matchLabels: {app: checkoutservice}}
+      ports: [{protocol: TCP, port: {{ .Values.services.shippingservice.containerPort }}}]
+---
+# 14. Redis Cart
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-cart-policy
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: redis-cart
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: cartservice}}}]
+      ports: [{protocol: TCP, port: {{ index .Values.services "redis-cart" | dig "containerPort" 6379 }}}]
+{{- end }}

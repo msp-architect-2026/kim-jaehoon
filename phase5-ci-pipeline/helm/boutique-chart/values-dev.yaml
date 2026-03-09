@@ -1,0 +1,14 @@
+# ==============================================================================
+# values-dev.yaml — 개발 환경 오버라이드
+# base values.yaml에서 변경이 필요한 값만 작성합니다.
+# ==============================================================================
+
+global:
+  registry: "192.168.10.47:5050/root/app-repo"
+  namespace: boutique
+
+# dev 환경: 파드 분산 soft 조건
+topologySpreadConstraints:
+  enabled: true
+  whenUnsatisfiable: ScheduleAnyway  # 노드 부족해도 배포는 허용
+

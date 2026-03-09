@@ -1,0 +1,32 @@
+# ==============================================================================
+# values-prod.yaml — 운영 환경 오버라이드
+# ==============================================================================
+
+global:
+  namespace: boutique-prod
+
+# prod 환경: 파드 반드시 분산
+topologySpreadConstraints:
+  enabled: true
+  maxSkew: 1
+  whenUnsatisfiable: DoNotSchedule   # 분산 불가능하면 스케줄 안 함
+
+# prod 환경: HPA 최대 레플리카 늘리기
+services:
+  frontend:
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+
+  cartservice:
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+
+  checkoutservice:
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
