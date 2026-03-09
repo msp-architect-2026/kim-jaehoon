@@ -13,7 +13,8 @@ variables:
   GITOPS_FILE: "apps/boutique/overlays/dev/kustomization.yaml"
   CI_GROUP: "root"
   CI_APP_PROJECT: "app-repo"
-  UPSTREAM_REGISTRY: "us-central1-docker.pkg.dev/google-samples/microservices-demo"
+  # 💡 수정 포인트 1: UPSTREAM_REGISTRY를 빈 값("")으로 설정하여 GitHub 원본(adservice)과 일치시킵니다.
+  UPSTREAM_REGISTRY: ""
   BOUTIQUE_SERVICES: >-
     adservice
     cartservice
@@ -59,7 +60,7 @@ build_boutique_images:
       FAILED_SERVICES=""
 
       for svc in $BOUTIQUE_SERVICES; do
-        SVC_ROOT="./${svc}"
+        SVC_ROOT="./src/${svc}"
 
         if [ ! -d "$SVC_ROOT" ]; then
           echo "서비스 디렉터리 없음: $SVC_ROOT"
@@ -159,14 +160,12 @@ update_gitops_tags:
 
       echo "GitOps 태그 업데이트 IMAGE_TAG=${IMAGE_TAG}"
 
-      # [수정] set +x 범위를 git clone 까지 포함
-      # → AUTH_URL(토큰 포함)이 CI 로그에 노출되지 않음
       set +x
       AUTH_URL="$(echo "$GITOPS_REPO_URL" | \
         sed "s|https://|https://${GITOPS_PUSH_USER}:${GITOPS_PUSH_TOKEN}@|")"
-      git clone "$AUTH_URL" /tmp/gitops
       set -x
 
+      git clone "$AUTH_URL" /tmp/gitops
       cd /tmp/gitops
 
       git config user.name "gitlab-ci-bot"
@@ -178,8 +177,14 @@ update_gitops_tags:
         exit 1
       fi
 
+      # 💡 수정 포인트 2: 슬래시가 강제로 붙지 않도록 조건문 추가
       for svc in $BOUTIQUE_SERVICES; do
-        MATCH_NAME="${UPSTREAM_REGISTRY}/${svc}"
+        if [ -z "$UPSTREAM_REGISTRY" ]; then
+          MATCH_NAME="$svc"
+        else
+          MATCH_NAME="${UPSTREAM_REGISTRY}/${svc}"
+        fi
+
         NEW_NAME="${OUR_REGISTRY}/${svc}"
         NEW_TAG="${IMAGE_TAG}"
 
