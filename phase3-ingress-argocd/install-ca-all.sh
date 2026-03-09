@@ -14,8 +14,8 @@ echo "=================================================="
 # ---------------------------------------------------------
 # 사용법 안내
 # ./install-ca.sh <CA_파일_경로> <레지스트리_HOST:PORT>
-# 예) ./install-ca.sh ./ca.crt 192.168.10.47:5050
-#     ./install-ca.sh /home/gitlab/config/ssl/ca.crt 192.168.123.100:5050
+# 예) ./install-ca.sh ./ca.crt <GITLAB_IP>:5050
+#     ./install-ca.sh /home/gitlab/config/ssl/ca.crt <GITLAB_IP>:5050
 
 CA_SRC="${1:-}"
 REGISTRY_HOSTPORT="${2:-}"
@@ -36,8 +36,8 @@ if [[ -z "$REGISTRY_HOSTPORT" ]]; then
   echo
   echo "Q2) GitLab Container Registry 주소를 입력하세요."
   echo "    - 형식: HOST:PORT (스킴 없이 입력)"
-  echo "    - 예) 192.168.10.47:5050"
-  echo "    - 예) 192.168.123.100:5050"
+  echo "    - 예) <GITLAB_IP>:5050"
+  echo "    - 예) <GITLAB_IP>:5050"
   echo "    ⚠️  http:// 또는 https:// 를 앞에 붙이면 안 됩니다."
   read -rp "    Registry HOST:PORT: " REGISTRY_HOSTPORT
 fi
@@ -60,7 +60,7 @@ fi
 # 스킴 포함 여부 체크 (http://, https:// 입력 방지)
 if [[ "$REGISTRY_HOSTPORT" =~ ^https?:// ]]; then
   err "❌ REGISTRY_HOSTPORT에 스킴(http/https)을 포함하면 안 됩니다."
-  echo "   ✅ 올바른 형식 예: 192.168.10.47:5050"
+  echo "   ✅ 올바른 형식 예: <GITLAB_IP>:5050"
   exit 1
 fi
 

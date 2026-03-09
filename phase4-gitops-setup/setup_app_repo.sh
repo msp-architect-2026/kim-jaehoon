@@ -2,7 +2,7 @@
 # ==============================================================================
 # 30-setup-app-repo.sh
 # 역할: Google Online Boutique 소스를 clone → app-repo(GitLab)에 push
-# 실행 위취 ex: Master Node (192.168.10.113)
+# 실행 위취 ex: Master Node (<K8S_MASTER_IP>)
 # 전제 조건:
 #   - .env.gitops-lab 파일이 동일 디렉터리에 존재 (10-k8s-bootstrap-phase3.sh 생성)
 #   - install-ca-all.sh 실행 완료 (OS CA 신뢰 등록됨)
@@ -83,7 +83,7 @@ else
   echo "   해결 방법 (아래 중 하나):"
   echo "   1. install-ca-all.sh 실행 완료 여부 확인"
   echo "   2. Mini PC에서 직접 복사:"
-  echo "      scp minipc@192.168.10.47:/home/gitlab/config/ssl/ca.crt ~/ca.crt"
+  echo "      scp minipc@<GITLAB_IP>:/home/gitlab/config/ssl/ca.crt ~/ca.crt"
   echo "   3. .env.gitops-lab에 아래 줄 추가:"
   echo "      GITLAB_CA_CERT=\"/경로/ca.crt\""
   exit 1
@@ -103,7 +103,7 @@ WORK_DIR="/tmp/boutique-setup-$$"
 
 echo "=================================================="
 echo " Step 1. app-repo 구성 (Online Boutique 소스 push)"
-echo " 실행 위치: Master Node (192.168.10.113)"
+echo " 실행 위치: Master Node (<K8S_MASTER_IP>)"
 echo "=================================================="
 warn "  GitLab URL   : ${GITLAB_URL}"
 warn "  app-repo     : ${GROUP}/${APP_PROJECT}"

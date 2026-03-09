@@ -14,8 +14,8 @@ echo "=================================================="
 # ---------------------------------------------------------
 # 사용법 안내
 # ./uninstall-ca.sh <레지스트리_HOST:PORT>
-# 예) ./uninstall-ca.sh 192.168.10.47:5050
-#     ./uninstall-ca.sh 192.168.123.100:5050
+# 예) ./uninstall-ca.sh <GITLAB_IP>:5050
+#     ./uninstall-ca.sh <GITLAB_IP>:5050
 #
 # .env 파일 연동 시:
 #   source .env.gitops-lab
@@ -29,8 +29,8 @@ if [[ -z "$REGISTRY_HOSTPORT" ]]; then
   echo "Q1) 취소할 GitLab Container Registry 주소를 입력하세요."
   echo "    - install-ca.sh 실행 시 입력했던 값과 동일하게 입력해야 합니다."
   echo "    - 형식: HOST:PORT (스킴 없이 입력)"
-  echo "    - 예) 192.168.10.47:5050"
-  echo "    - 예) 192.168.123.100:5050"
+  echo "    - 예) <GITLAB_IP>:5050"
+  echo "    - 예) <GITLAB_IP>:5050"
   echo "    ⚠️  http:// 또는 https:// 를 앞에 붙이면 안 됩니다."
   read -rp "    Registry HOST:PORT: " REGISTRY_HOSTPORT
 fi
@@ -45,7 +45,7 @@ fi
 
 if [[ "$REGISTRY_HOSTPORT" =~ ^https?:// ]]; then
   err "❌ REGISTRY_HOSTPORT에 스킴(http/https)을 포함하면 안 됩니다."
-  echo "   ✅ 올바른 형식 예: 192.168.10.47:5050"
+  echo "   ✅ 올바른 형식 예: <GITLAB_IP>:5050"
   exit 1
 fi
 

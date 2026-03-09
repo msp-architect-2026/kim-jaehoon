@@ -6,7 +6,7 @@
 #   2. 기존 필수 CI Variables 존재 확인
 #   3. .gitlab-ci.yml 완성본을 app-repo에 커밋/push
 #
-# 실행 위치: Master Node (192.168.10.113)
+# 실행 위치: Master Node (<K8S_MASTER_IP>)
 #
 # 토큰 역할 분리:
 #   GITLAB_ADMIN_TOKEN : api scope PAT → GitLab API 호출 (CI Variable 등록)
@@ -85,7 +85,7 @@ if CA_CERT="$(resolve_ca_cert)"; then
   say "✅ CA 파일 확인: $CA_CERT"
 else
   err "❌ CA 파일을 찾을 수 없습니다."
-  echo "   scp minipc@192.168.10.47:/home/gitlab/config/ssl/ca.crt ~/ca.crt"
+  echo "   scp minipc@<GITLAB_IP>:/home/gitlab/config/ssl/ca.crt ~/ca.crt"
   exit 1
 fi
 
@@ -99,7 +99,7 @@ CI_YML_SRC="${SCRIPT_DIR}/.gitlab-ci.yml"
 
 echo "=================================================="
 echo " Step 3. CI Variable 등록 + .gitlab-ci.yml push"
-echo " 실행 위치: Master Node (192.168.10.113)"
+echo " 실행 위치: Master Node (<K8S_MASTER_IP>)"
 echo "=================================================="
 warn "  GitLab URL        : ${GITLAB_URL}"
 warn "  app-repo          : ${GROUP}/${APP_PROJECT}"
@@ -276,5 +276,5 @@ echo ""
 echo "  → 이제 app-repo에 코드를 push하면 파이프라인이 자동 실행됩니다."
 echo "  → Argo CD 확인:"
 echo "     kubectl port-forward svc/argocd-server -n argocd 8080:443 --address 0.0.0.0"
-echo "     브라우저: https://192.168.10.113:8080"
+echo "     브라우저: https://<K8S_MASTER_IP>:8080"
 echo "=================================================="

@@ -59,7 +59,7 @@ if [[ -z "$REGISTRY_HOSTPORT" ]]; then
 fi
 if [[ "$REGISTRY_HOSTPORT" =~ ^https?:// ]]; then
   err "❌ REGISTRY_HOSTPORT에 스킴 불가: $REGISTRY_HOSTPORT"
-  echo "   ✅ 예: 192.168.10.47:5050"
+  echo "   ✅ 예: <GITLAB_IP>:5050"
   exit 1
 fi
 if [[ -z "$GITOPS_REPO_URL" ]]; then

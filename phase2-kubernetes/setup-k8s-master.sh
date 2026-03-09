@@ -95,9 +95,9 @@ kubectl wait --for=condition=Ready pod \
 curl -fsSL https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml -o custom-resources.yaml
 
 # CIDR 설정 변경
-if [ "$POD_CIDR" != "192.168.0.0/16" ]; then
+if [ "$POD_CIDR" != "<POD_CIDR>" ]; then
     echo "Info: Calico 설정을 사용자 지정 CIDR($POD_CIDR)로 변경합니다."
-    sed -i "s|192.168.0.0/16|$POD_CIDR|g" custom-resources.yaml
+    sed -i "s|<POD_CIDR>|$POD_CIDR|g" custom-resources.yaml
 fi
 
 kubectl apply -f custom-resources.yaml

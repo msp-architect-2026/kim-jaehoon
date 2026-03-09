@@ -150,7 +150,7 @@ echo " GitLab Bootstrap (SAFE + HTTPS/CA 지원)"
 echo "=================================================="
 
 DETECTED_IP="$(ip route get 8.8.8.8 2>/dev/null | awk -F"src " 'NR==1{split($2,a," ");print a[1]}')"
-DETECTED_IP="${DETECTED_IP:-192.168.10.47}"
+DETECTED_IP="${DETECTED_IP:-<GITLAB_IP>}"
 
 read -rp "Q1) GitLab URL [기본: https://${DETECTED_IP}]: " GITLAB_URL
 GITLAB_URL="${GITLAB_URL:-https://${DETECTED_IP}}"
