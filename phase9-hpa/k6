@@ -1,0 +1,116 @@
+import http from 'k6/http';
+import { sleep, check } from 'k6';
+
+// 외부 jslib 의존성 제거 - 인라인 구현
+function randomItem(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// =============================================
+// 실행 방법 (매니지먼트 서버)
+// 1. hosts 등록 확인:
+//    grep boutique /etc/hosts
+//    없으면: echo "192.168.123.200 boutique.com" | sudo tee -a /etc/hosts
+//
+// 2. k6 설치 (Rocky 9):
+//    sudo dnf install -y https://dl.k6.io/rpm/repo.rpm
+//    sudo dnf install -y k6
+//
+// 3. 실행:
+//    k6 run load-test.js
+// =============================================
+
+export const options = {
+  insecureSkipTLSVerify: true, // 자체 서명 인증서 무시
+
+  stages: [
+    { duration: '1m',  target: 10  }, // 평상시 트래픽
+    { duration: '30s', target: 150 }, // 세일 시작 - 급격한 폭증
+    { duration: '2m',  target: 150 }, // 피크 유지 (HPA 스케일아웃 관찰)
+    { duration: '30s', target: 10  }, // 안정화 (스케일다운 관찰)
+  ],
+
+  thresholds: {
+    http_req_duration: ['p(95)<3000'], // 95%가 3초 이내 응답
+    http_req_failed:   ['rate<0.05'], // 에러율 5% 미만
+  },
+};
+
+const BASE_URL = 'https://boutique.com';
+
+// Online Boutique 실제 상품 ID
+const PRODUCTS = [
+  '0PUK6V6EV0',
+  '1YMWWN1N4O',
+  '2ZYFJ3GM2N',
+  '66VCHSJNUP',
+  '6E92ZMYYFZ',
+  '9SIQT8TOJO',
+];
+
+// [70%] 홈페이지 + 상품 조회만 (구경꾼)
+function browseOnly() {
+  let res = http.get(`${BASE_URL}/`);
+  check(res, { '[홈] status 200': (r) => r.status === 200 });
+  sleep(1);
+
+  res = http.get(`${BASE_URL}/product/${randomItem(PRODUCTS)}`);
+  check(res, { '[상품조회] status 200': (r) => r.status === 200 });
+  sleep(1);
+}
+
+// [20%] 홈 → 상품 조회 → 장바구니 추가 (구매 고려)
+function addToCart() {
+  browseOnly();
+
+  let res = http.post(
+    `${BASE_URL}/cart`,
+    { product_id: randomItem(PRODUCTS), quantity: '1' },
+  );
+  check(res, { '[장바구니추가] status 200': (r) => r.status === 200 });
+  sleep(1);
+
+  res = http.get(`${BASE_URL}/cart`);
+  check(res, { '[장바구니조회] status 200': (r) => r.status === 200 });
+  sleep(1);
+}
+
+// [10%] 홈 → 상품 → 장바구니 → 결제 (실구매자)
+function checkout() {
+  addToCart();
+
+  // 통화 변경 (currencyservice 호출)
+  http.post(`${BASE_URL}/setCurrency`, { currency_code: 'KRW' });
+  sleep(0.5);
+
+  // 결제 진행 (checkoutservice → payment, shipping, currency 직렬 호출)
+  const res = http.post(`${BASE_URL}/checkout`, {
+    email:                          'test@boutique.com',
+    street_address:                 '123 Teheran-ro',
+    zip_code:                       '06234',
+    city:                           'Seoul',
+    state:                          'Seoul',
+    country:                        'KR',
+    credit_card_number:             '4432801561520454',
+    credit_card_expiration_month:   '1',
+    credit_card_expiration_year:    '2030',
+    credit_card_cvv:                '672',
+  });
+  check(res, { '[결제] status 200': (r) => r.status === 200 });
+  sleep(2);
+}
+
+// =============================================
+// 메인 - 실제 이커머스 사용자 행동 비율 반영
+// =============================================
+export default function () {
+  const rand = Math.random() * 100;
+
+  if (rand < 70) {
+    browseOnly(); // 70%: 구경만 하고 나감
+  } else if (rand < 90) {
+    addToCart();  // 20%: 장바구니까지
+  } else {
+    checkout();   // 10%: 실제 결제
+  }
+}
