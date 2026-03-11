@@ -1,5 +1,5 @@
 global:
-  registry: <REGISTRY_IP>:5050/root/app-repo
+  registry: 192.168.123.100:5050/root/app-repo
   namespace: boutique
   imagePullSecrets:
   - name: gitlab-regcred
@@ -19,12 +19,16 @@ ingress:
   tls:
     enabled: true
     secretName: boutique-tls-secret
+  rateLimit:
+    rps: "20"
+    connections: "20"
+    burstMultiplier: "5"
 hpa:
   defaultCpuUtilization: 50
   scaleDownStabilizationWindow: 60
 services:
   adservice:
-    enabled: false  # 광고 서비스, 핵심 플로우 무관 → 비활성화
+    enabled: false
     image:
       name: adservice
       tag: 8f0fcd7a
@@ -45,10 +49,17 @@ services:
     probe:
       type: grpc
       port: 9555
-      initialDelaySeconds: 20
-      periodSeconds: 15
+      readiness:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 60
+        periodSeconds: 20
+        failureThreshold: 5
     hpa:
       enabled: false
+
   cartservice:
     enabled: true
     image:
@@ -57,7 +68,8 @@ services:
     containerPort: 7070
     servicePort: 7070
     serviceProtocol: grpc
-    terminationGracePeriodSeconds: 5
+    terminationGracePeriodSeconds: 30
+    priorityClassName: boutique-critical
     resources:
       requests:
         cpu: 50m
@@ -71,12 +83,22 @@ services:
     probe:
       type: grpc
       port: 7070
-      initialDelaySeconds: 15
-      periodSeconds: 10
+      readiness:
+        initialDelaySeconds: 15
+        periodSeconds: 10
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 45
+        periodSeconds: 20
+        failureThreshold: 3
     hpa:
       enabled: true
-      minReplicas: 1
-      maxReplicas: 5
+      minReplicas: 2
+      maxReplicas: 3
+    pdb:
+      enabled: true
+      maxUnavailable: 1
+
   checkoutservice:
     enabled: true
     image:
@@ -85,13 +107,15 @@ services:
     containerPort: 5050
     servicePort: 5050
     serviceProtocol: grpc
+    terminationGracePeriodSeconds: 60
+    priorityClassName: boutique-critical
     resources:
       requests:
         cpu: 20m
         memory: 32Mi
       limits:
         cpu: 100m
-        memory: 128Mi  # 64Mi → 128Mi (6개 서비스 직렬 호출, OOM 방지)
+        memory: 128Mi
     env:
     - name: PORT
       value: '5050'
@@ -110,12 +134,22 @@ services:
     probe:
       type: grpc
       port: 5050
-      initialDelaySeconds: 20
-      periodSeconds: 15
+      readiness:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 60
+        periodSeconds: 30
+        failureThreshold: 3
     hpa:
       enabled: true
-      minReplicas: 1
-      maxReplicas: 3  # 2 → 3
+      minReplicas: 2
+      maxReplicas: 3
+    pdb:
+      enabled: true
+      maxUnavailable: 1
+
   currencyservice:
     enabled: true
     image:
@@ -124,14 +158,15 @@ services:
     containerPort: 7000
     servicePort: 7000
     serviceProtocol: grpc
-    terminationGracePeriodSeconds: 5
+    terminationGracePeriodSeconds: 30
+    priorityClassName: boutique-critical
     resources:
       requests:
         cpu: 20m
         memory: 32Mi
       limits:
         cpu: 100m
-        memory: 128Mi  # 64Mi → 128Mi (실제 사용 53Mi, 한계치 너무 근접)
+        memory: 128Mi
     env:
     - name: PORT
       value: '7000'
@@ -140,14 +175,24 @@ services:
     probe:
       type: grpc
       port: 7000
-      initialDelaySeconds: 20
-      periodSeconds: 15
+      readiness:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 60
+        periodSeconds: 20
+        failureThreshold: 5
     hpa:
       enabled: true
-      minReplicas: 1
-      maxReplicas: 5
+      minReplicas: 2
+      maxReplicas: 3
+    pdb:
+      enabled: true
+      maxUnavailable: 1
+
   emailservice:
-    enabled: false  # 주문 완료 이메일, checkout 비동기 호출이라 실패해도 결제 완료 → 비활성화
+    enabled: false
     image:
       name: emailservice
       tag: 8f0fcd7a
@@ -171,10 +216,17 @@ services:
     probe:
       type: grpc
       port: 8080
-      initialDelaySeconds: 20
-      periodSeconds: 5
+      readiness:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 60
+        periodSeconds: 20
+        failureThreshold: 5
     hpa:
       enabled: false
+
   frontend:
     enabled: true
     image:
@@ -190,13 +242,15 @@ services:
       runAsGroup: 1000
       runAsNonRoot: true
       runAsUser: 1000
+    terminationGracePeriodSeconds: 30
+    priorityClassName: boutique-critical
     resources:
       requests:
         cpu: 50m
         memory: 64Mi
       limits:
         cpu: 500m
-        memory: 256Mi  # 128Mi → 256Mi (모든 요청 진입점, OOM 방지)
+        memory: 256Mi
     env:
     - name: PORT
       value: '8080'
@@ -225,11 +279,22 @@ services:
       httpHeaders:
       - name: Cookie
         value: shop_session-id=x-readiness-probe
-      initialDelaySeconds: 10
+      readiness:
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 30
+        periodSeconds: 20
+        failureThreshold: 5
     hpa:
       enabled: true
-      minReplicas: 1
-      maxReplicas: 5  # 10 → 5 (워커 2대 한계 고려)
+      minReplicas: 2
+      maxReplicas: 3
+    pdb:
+      enabled: true
+      maxUnavailable: 1
+
   paymentservice:
     enabled: true
     image:
@@ -238,14 +303,15 @@ services:
     containerPort: 50051
     servicePort: 50051
     serviceProtocol: grpc
-    terminationGracePeriodSeconds: 5
+    terminationGracePeriodSeconds: 60
+    priorityClassName: boutique-critical
     resources:
       requests:
         cpu: 20m
         memory: 32Mi
       limits:
         cpu: 100m
-        memory: 128Mi  # 64Mi → 128Mi (OOM 방지)
+        memory: 128Mi
     env:
     - name: PORT
       value: '50051'
@@ -254,12 +320,22 @@ services:
     probe:
       type: grpc
       port: 50051
-      initialDelaySeconds: 20
-      periodSeconds: 15
+      readiness:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 60
+        periodSeconds: 30
+        failureThreshold: 3
     hpa:
-      enabled: true  # 새로 활성화 (checkout 트래픽 비례)
-      minReplicas: 1
+      enabled: true
+      minReplicas: 2
       maxReplicas: 3
+    pdb:
+      enabled: true
+      maxUnavailable: 1
+
   productcatalogservice:
     enabled: true
     image:
@@ -268,7 +344,8 @@ services:
     containerPort: 3550
     servicePort: 3550
     serviceProtocol: grpc
-    terminationGracePeriodSeconds: 5
+    terminationGracePeriodSeconds: 30
+    priorityClassName: boutique-critical
     resources:
       requests:
         cpu: 20m
@@ -284,14 +361,24 @@ services:
     probe:
       type: grpc
       port: 3550
-      initialDelaySeconds: 20
-      periodSeconds: 15
+      readiness:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 60
+        periodSeconds: 20
+        failureThreshold: 5
     hpa:
-      enabled: true  # 새로 활성화 (frontend + checkout 모두 호출)
-      minReplicas: 1
+      enabled: true
+      minReplicas: 2
       maxReplicas: 3
+    pdb:
+      enabled: true
+      maxUnavailable: 1
+
   recommendationservice:
-    enabled: false  # 상품 추천, 없어도 구매 가능 → 비활성화
+    enabled: false
     image:
       name: recommendationservice
       tag: 8f0fcd7a
@@ -316,10 +403,17 @@ services:
     probe:
       type: grpc
       port: 8080
-      initialDelaySeconds: 20
-      periodSeconds: 5
+      readiness:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 60
+        periodSeconds: 20
+        failureThreshold: 5
     hpa:
       enabled: false
+
   shippingservice:
     enabled: true
     image:
@@ -328,13 +422,15 @@ services:
     containerPort: 50051
     servicePort: 50051
     serviceProtocol: grpc
+    terminationGracePeriodSeconds: 30
+    priorityClassName: boutique-standard
     resources:
       requests:
         cpu: 20m
         memory: 32Mi
       limits:
         cpu: 100m
-        memory: 128Mi  # 64Mi → 128Mi (OOM 방지)
+        memory: 128Mi
     env:
     - name: PORT
       value: '50051'
@@ -343,12 +439,22 @@ services:
     probe:
       type: grpc
       port: 50051
-      initialDelaySeconds: 20
-      periodSeconds: 5
+      readiness:
+        initialDelaySeconds: 20
+        periodSeconds: 10
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 60
+        periodSeconds: 20
+        failureThreshold: 5
     hpa:
-      enabled: true  # 새로 활성화 (checkout 트래픽 비례)
-      minReplicas: 1
+      enabled: true
+      minReplicas: 2
       maxReplicas: 3
+    pdb:
+      enabled: true
+      minAvailable: 1
+
   redis-cart:
     enabled: true
     image:
@@ -359,6 +465,8 @@ services:
     servicePort: 6379
     serviceProtocol: tcp-redis
     createServiceAccount: false
+    terminationGracePeriodSeconds: 30
+    priorityClassName: boutique-critical
     resources:
       requests:
         cpu: 50m
@@ -371,11 +479,18 @@ services:
       name: redis-data
     volumes:
     - name: redis-data
-      emptyDir: {}
+      persistentVolumeClaim:
+        claimName: redis-cart-pvc
     probe:
       type: tcp
       port: 6379
-      initialDelaySeconds: 5
-      periodSeconds: 5
+      readiness:
+        initialDelaySeconds: 5
+        periodSeconds: 5
+        failureThreshold: 3
+      liveness:
+        initialDelaySeconds: 30
+        periodSeconds: 15
+        failureThreshold: 3
     hpa:
       enabled: false
